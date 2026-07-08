@@ -1,0 +1,10 @@
+{
+  "name": "Quiz Study",
+  "short_name": "Quiz",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F9FA",
+  "theme_color": "#256D85",
+  "description": "Personal quiz study app for imported JSON decks.",
+  "orientation": "portrait-primary"
+}

@@ -29,15 +29,27 @@ flutter pub get
 flutter run -d chrome
 ```
 
-## GitHub Pages公開
+## GitHub Pages公開: docsフォルダ方式
 
-リポジトリ名が`quiz-study`の場合の例です。
+このリポジトリでは、GitHub Pagesで公開するビルド済みファイルを`docs/`に配置します。
+
+すでに`build/web`の内容を`docs/`へコピー済みです。`docs/index.html`の`base href`は、GitHub Pagesのプロジェクトページでも動きやすいように`./`へ調整しています。
+
+GitHub側の設定:
+
+1. GitHubリポジトリを開く
+2. `Settings`を開く
+3. `Pages`を開く
+4. `Build and deployment`の`Source`を`Deploy from a branch`にする
+5. `Branch`を`main`、フォルダを`/docs`にする
+6. `Save`する
+
+次回以降、Flutter SDKが使える環境では次の流れで更新します。
 
 ```powershell
-flutter build web --release --base-href "/quiz-study/"
+flutter build web --release --base-href "./"
+Copy-Item -Path build\web\* -Destination docs -Recurse -Force
 ```
-
-生成された`build/web`をGitHub Pagesで公開します。
 
 iPhoneではSafariで公開URLを開き、共有メニューから「ホーム画面に追加」を選びます。
 
