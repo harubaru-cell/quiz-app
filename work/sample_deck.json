@@ -1,0 +1,27 @@
+{
+  "subject": "サンプル科目",
+  "title": "サンプル4択デッキ",
+  "version": "1.0",
+  "questions": [
+    {
+      "id": "sample-001",
+      "type": "multiple_choice",
+      "question": "このアプリのVer.1で対応する問題形式はどれですか？",
+      "choices": ["4択問題", "穴埋め問題", "記述問題", "並べ替え問題"],
+      "answer": 0,
+      "explanation": "Ver.1では multiple_choice の4択問題のみ対応します。",
+      "tags": ["仕様"],
+      "difficulty": "easy"
+    },
+    {
+      "id": "sample-002",
+      "type": "multiple_choice",
+      "question": "学習データはどこに保存されますか？",
+      "choices": ["ブラウザ内", "外部サーバー", "メール", "紙のノート"],
+      "answer": 0,
+      "explanation": "ログインやクラウド同期は行わず、端末のブラウザ内に保存します。",
+      "tags": ["保存"],
+      "difficulty": "normal"
+    }
+  ]
+}
