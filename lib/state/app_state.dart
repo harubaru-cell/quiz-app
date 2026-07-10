@@ -10,25 +10,31 @@ import '../repositories/deck_repository.dart';
 import '../repositories/history_repository.dart';
 import '../services/json_import_service.dart';
 import '../services/storage_service.dart';
+import '../services/zip_import_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState({
     StorageService? storageService,
     JsonImportService? jsonImportService,
+    ZipImportService? zipImportService,
   })  : _storageService = storageService ?? StorageService(),
-        _jsonImportService = jsonImportService ?? JsonImportService() {
+        _jsonImportService = jsonImportService ?? JsonImportService(),
+        _zipImportService = zipImportService ?? ZipImportService() {
     _deckRepository = DeckRepository(_storageService);
     _historyRepository = HistoryRepository(_storageService);
   }
 
   final StorageService _storageService;
   final JsonImportService _jsonImportService;
+  final ZipImportService _zipImportService;
+
   late final DeckRepository _deckRepository;
   late final HistoryRepository _historyRepository;
 
   List<QuizDeck> _decks = <QuizDeck>[];
   List<QuizHistory> _histories = <QuizHistory>[];
   Map<String, DeckStats> _stats = <String, DeckStats>{};
+
   bool _isLoading = false;
   String? _message;
 
@@ -43,6 +49,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     _isLoading = true;
     notifyListeners();
+
     try {
       _decks = await _deckRepository.loadDecks();
       _histories = await _historyRepository.loadHistories();
@@ -60,53 +67,127 @@ class AppState extends ChangeNotifier {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['json'],
+        allowedExtensions: const [
+          'json',
+          'zip',
+        ],
         withData: true,
       );
+
       if (result == null || result.files.isEmpty) {
         return;
       }
-      final bytes = result.files.single.bytes;
+
+      final file = result.files.single;
+      final bytes = file.bytes;
+
       if (bytes == null) {
-        throw const FormatException('ファイルを読み込めませんでした。');
+        throw const FormatException(
+          'ファイルを読み込めませんでした。',
+        );
       }
-      await importDeckFromBytes(bytes);
+
+      final extension = _getFileExtension(file);
+
+      final QuizDeck deck;
+
+      if (extension == 'json') {
+        final source = utf8.decode(bytes);
+        deck = _jsonImportService.parseDeck(source);
+      } else if (extension == 'zip') {
+        deck = await _zipImportService.importDeck(bytes);
+      } else {
+        throw const FormatException(
+          'JSONまたはZIPファイルを選択してください。',
+        );
+      }
+
+      await _saveImportedDeck(deck);
     } catch (error) {
-      _message = 'JSONの追加に失敗しました: $error';
+      _message = 'デッキの追加に失敗しました: $error';
       notifyListeners();
     }
   }
 
-  Future<void> importDeckFromBytes(Uint8List bytes) async {
+  Future<void> importDeckFromBytes(
+    Uint8List bytes,
+  ) async {
     final source = utf8.decode(bytes);
     final deck = _jsonImportService.parseDeck(source);
+
+    await _saveImportedDeck(deck);
+  }
+
+  Future<void> _saveImportedDeck(
+    QuizDeck deck,
+  ) async {
     _decks = <QuizDeck>[
-      ..._decks.where((item) => item.id != deck.id),
+      ..._decks.where(
+        (item) => item.id != deck.id,
+      ),
       deck,
     ];
-    _stats.putIfAbsent(deck.id, () => DeckStats.empty(deck.id));
+
+    _stats.putIfAbsent(
+      deck.id,
+      () => DeckStats.empty(deck.id),
+    );
+
     await _deckRepository.saveDecks(_decks);
     await _historyRepository.saveStats(_stats);
+
     _message = '「${deck.title}」を追加しました。';
     notifyListeners();
   }
 
+  String _getFileExtension(
+    PlatformFile file,
+  ) {
+    final extension = file.extension?.trim().toLowerCase();
+
+    if (extension != null && extension.isNotEmpty) {
+      return extension;
+    }
+
+    final dotIndex = file.name.lastIndexOf('.');
+
+    if (dotIndex == -1 || dotIndex == file.name.length - 1) {
+      return '';
+    }
+
+    return file.name.substring(dotIndex + 1).toLowerCase();
+  }
+
   Future<void> deleteDeck(String deckId) async {
     _decks = _decks.where((deck) => deck.id != deckId).toList();
+
     _histories =
         _histories.where((history) => history.deckId != deckId).toList();
+
     _stats.remove(deckId);
+
     await _deckRepository.saveDecks(_decks);
     await _historyRepository.saveHistories(_histories);
     await _historyRepository.saveStats(_stats);
+
     _message = 'デッキを削除しました。';
     notifyListeners();
   }
 
-  Future<void> recordHistory(QuizHistory history) async {
-    _histories = <QuizHistory>[..._histories, history];
+  Future<void> recordHistory(
+    QuizHistory history,
+  ) async {
+    _histories = <QuizHistory>[
+      ..._histories,
+      history,
+    ];
+
     final previous = _stats[history.deckId] ?? DeckStats.empty(history.deckId);
-    final incorrectIds = Set<String>.from(previous.incorrectQuestionIds);
+
+    final incorrectIds = Set<String>.from(
+      previous.incorrectQuestionIds,
+    );
+
     for (final result in history.results) {
       if (result.isCorrect) {
         incorrectIds.remove(result.questionId);
@@ -125,6 +206,7 @@ class AppState extends ChangeNotifier {
 
     await _historyRepository.saveHistories(_histories);
     await _historyRepository.saveStats(_stats);
+
     notifyListeners();
   }
 
