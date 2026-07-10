@@ -1,6 +1,8 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../services/audio_storage_service.dart';
+
 class QuestionAudioButton extends StatefulWidget {
   const QuestionAudioButton({
     required this.audioPath,
@@ -34,6 +36,66 @@ class _QuestionAudioButtonState extends State<QuestionAudioButton> {
     return normalizedPath;
   }
 
+  String? _mimeTypeFromPath(String path) {
+    final normalizedPath = path.toLowerCase().split('?').first;
+
+    if (normalizedPath.endsWith('.mp3')) {
+      return 'audio/mpeg';
+    }
+
+    if (normalizedPath.endsWith('.m4a')) {
+      return 'audio/mp4';
+    }
+
+    if (normalizedPath.endsWith('.wav')) {
+      return 'audio/wav';
+    }
+
+    if (normalizedPath.endsWith('.ogg')) {
+      return 'audio/ogg';
+    }
+
+    if (normalizedPath.endsWith('.aac')) {
+      return 'audio/aac';
+    }
+
+    if (normalizedPath.endsWith('.webm')) {
+      return 'audio/webm';
+    }
+
+    return null;
+  }
+
+  Future<Source> _createSource() async {
+    final audioPath = widget.audioPath;
+    final storageService = AudioStorageService.instance;
+
+    if (storageService.isStoredAudioReference(audioPath)) {
+      final storageKey = storageService.getStorageKeyFromReference(audioPath);
+
+      final bytes = await storageService.loadAudio(storageKey);
+
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError(
+          '端末内に音声データが見つかりません。',
+        );
+      }
+
+      return BytesSource(
+        bytes,
+        mimeType: _mimeTypeFromPath(storageKey),
+      );
+    }
+
+    if (_isNetworkAudio(audioPath)) {
+      return UrlSource(audioPath);
+    }
+
+    return AssetSource(
+      _normalizeAssetPath(audioPath),
+    );
+  }
+
   Future<void> _playAudio() async {
     if (_isLoading) {
       return;
@@ -46,15 +108,7 @@ class _QuestionAudioButtonState extends State<QuestionAudioButton> {
     try {
       await _player.stop();
 
-      final Source source;
-
-      if (_isNetworkAudio(widget.audioPath)) {
-        source = UrlSource(widget.audioPath);
-      } else {
-        source = AssetSource(
-          _normalizeAssetPath(widget.audioPath),
-        );
-      }
+      final source = await _createSource();
 
       await _player.play(source);
     } catch (error) {
