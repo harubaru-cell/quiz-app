@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/quiz_question.dart';
 import '../state/app_state.dart';
 import '../state/quiz_session_state.dart';
 import '../widgets/bottom_action_area.dart';
@@ -17,15 +18,20 @@ class QuizScreen extends StatelessWidget {
         if (!session.hasQuestions) {
           return Scaffold(
             appBar: AppBar(title: const Text('クイズ')),
-            body: const Center(child: Text('出題できる問題がありません。')),
+            body: const Center(
+              child: Text('出題できる問題がありません。'),
+            ),
           );
         }
 
         final item = session.currentQuestion;
         final question = item.question;
+
         return Scaffold(
           appBar: AppBar(
-            title: Text('${session.currentIndex + 1} / ${session.totalCount}'),
+            title: Text(
+              '${session.currentIndex + 1} / ${session.totalCount}',
+            ),
             actions: [
               TextButton(
                 onPressed: () => _finishEarly(context, session),
@@ -44,19 +50,30 @@ class QuizScreen extends StatelessWidget {
                     ?.copyWith(height: 1.45),
               ),
               const SizedBox(height: 20),
-              for (var index = 0;
-                  index < item.displayChoices.length;
-                  index++) ...[
-                ChoiceButton(
-                  index: index,
-                  label: item.displayChoices[index],
-                  isAnswered: session.answered,
-                  isSelected: session.selectedIndex == index,
-                  isCorrect: item.correctIndex == index,
-                  onPressed: () => session.answer(index),
+
+              // 4択問題
+              if (question.type == QuestionType.multipleChoice)
+                for (var index = 0;
+                    index < item.displayChoices.length;
+                    index++) ...[
+                  ChoiceButton(
+                    index: index,
+                    label: item.displayChoices[index],
+                    isAnswered: session.answered,
+                    isSelected: session.selectedIndex == index,
+                    isCorrect: item.correctIndex == index,
+                    onPressed: () => session.answer(index),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+              // 記述式問題
+              if (question.type == QuestionType.textInput)
+                _TextInputAnswer(
+                  key: ValueKey(question.id),
+                  session: session,
                 ),
-                const SizedBox(height: 10),
-              ],
+
               if (session.answered) ...[
                 const SizedBox(height: 16),
                 _AnswerPanel(session: session),
@@ -66,11 +83,16 @@ class QuizScreen extends StatelessWidget {
           bottomNavigationBar: session.answered
               ? BottomActionArea(
                   child: FilledButton.icon(
-                    onPressed: () => _nextOrFinish(context, session),
-                    icon: Icon(session.isLastQuestion
-                        ? Icons.flag
-                        : Icons.navigate_next),
-                    label: Text(session.isLastQuestion ? '結果を見る' : '次へ'),
+                    onPressed: () => _nextOrFinish(
+                      context,
+                      session,
+                    ),
+                    icon: Icon(
+                      session.isLastQuestion ? Icons.flag : Icons.navigate_next,
+                    ),
+                    label: Text(
+                      session.isLastQuestion ? '結果を見る' : '次へ',
+                    ),
                   ),
                 )
               : null,
@@ -80,24 +102,35 @@ class QuizScreen extends StatelessWidget {
   }
 
   Future<void> _nextOrFinish(
-      BuildContext context, QuizSessionState session) async {
+    BuildContext context,
+    QuizSessionState session,
+  ) async {
     if (session.moveNext()) {
       return;
     }
+
     final history = session.finish(completed: true);
+
     await context.read<AppState>().recordHistory(history);
+
     if (!context.mounted) {
       return;
     }
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => ResultScreen(deck: session.deck, history: history),
+        builder: (_) => ResultScreen(
+          deck: session.deck,
+          history: history,
+        ),
       ),
     );
   }
 
   Future<void> _finishEarly(
-      BuildContext context, QuizSessionState session) async {
+    BuildContext context,
+    QuizSessionState session,
+  ) async {
     if (session.answeredCount == 0) {
       Navigator.of(context).pop();
       return;
@@ -107,7 +140,9 @@ class QuizScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('途中終了しますか？'),
-        content: const Text('ここまでの結果を学習履歴として保存します。'),
+        content: const Text(
+          'ここまでの結果を学習履歴として保存します。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -120,34 +155,111 @@ class QuizScreen extends StatelessWidget {
         ],
       ),
     );
+
     if (shouldFinish != true || !context.mounted) {
       return;
     }
 
     final history = session.finish(completed: false);
+
     await context.read<AppState>().recordHistory(history);
+
     if (!context.mounted) {
       return;
     }
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) => ResultScreen(deck: session.deck, history: history),
+        builder: (_) => ResultScreen(
+          deck: session.deck,
+          history: history,
+        ),
       ),
     );
   }
 }
 
+class _TextInputAnswer extends StatefulWidget {
+  const _TextInputAnswer({
+    required this.session,
+    super.key,
+  });
+
+  final QuizSessionState session;
+
+  @override
+  State<_TextInputAnswer> createState() => _TextInputAnswerState();
+}
+
+class _TextInputAnswerState extends State<_TextInputAnswer> {
+  final TextEditingController _controller = TextEditingController();
+
+  bool get _canSubmit {
+    return !widget.session.answered && _controller.text.trim().isNotEmpty;
+  }
+
+  void _submit() {
+    if (!_canSubmit) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    widget.session.answerText(_controller.text);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          enabled: !widget.session.answered,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(
+            labelText: '回答',
+            hintText: '答えを入力してください',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (_) {
+            setState(() {});
+          },
+          onSubmitted: (_) => _submit(),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _canSubmit ? _submit : null,
+          icon: const Icon(Icons.check),
+          label: const Text('回答する'),
+        ),
+      ],
+    );
+  }
+}
+
 class _AnswerPanel extends StatelessWidget {
-  const _AnswerPanel({required this.session});
+  const _AnswerPanel({
+    required this.session,
+  });
 
   final QuizSessionState session;
 
   @override
   Widget build(BuildContext context) {
     final item = session.currentQuestion;
-    final selected = session.selectedIndex;
-    final isCorrect = selected == item.correctIndex;
+
+    final isCorrect =
+        session.results.isNotEmpty && session.results.last.isCorrect;
+
     final colorScheme = Theme.of(context).colorScheme;
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: isCorrect
@@ -170,13 +282,21 @@ class _AnswerPanel extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 8),
+            if (session.textAnswer != null) ...[
+              Text(
+                'あなたの回答: ${session.textAnswer}',
+              ),
+              const SizedBox(height: 4),
+            ],
             if (item.correctIndex != null)
               Text(
                 '正解: ${item.correctIndex! + 1}. '
                 '${item.displayChoices[item.correctIndex!]}',
               )
             else if (item.question.answers.isNotEmpty)
-              Text('正解: ${item.question.answers.first}'),
+              Text(
+                '正解: ${item.question.answers.first}',
+              ),
             if (item.question.explanation.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(item.question.explanation),
