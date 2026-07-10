@@ -41,7 +41,8 @@ class QuizDeck {
       title: json['title'] as String,
       version: json['version'] as String,
       questions: questionsJson
-          .map((item) => QuizQuestion.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) =>
+              QuizQuestion.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? now,
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? now,
@@ -50,6 +51,7 @@ class QuizDeck {
 
   QuizDeck copyWith({
     String? id,
+    List<QuizQuestion>? questions,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -58,7 +60,7 @@ class QuizDeck {
       subject: subject,
       title: title,
       version: version,
-      questions: questions,
+      questions: questions ?? this.questions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
