@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../state/quiz_session_state.dart';
 import '../widgets/bottom_action_area.dart';
 import '../widgets/choice_button.dart';
+import '../widgets/question_audio_button.dart';
 import 'result_screen.dart';
 
 class QuizScreen extends StatelessWidget {
@@ -49,6 +50,17 @@ class QuizScreen extends StatelessWidget {
                     .titleLarge
                     ?.copyWith(height: 1.45),
               ),
+
+              if (question.audio != null) ...[
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: QuestionAudioButton(
+                    audioPath: question.audio!,
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 20),
 
               // 4択問題
