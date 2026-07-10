@@ -22,20 +22,30 @@ class QuizSessionState extends ChangeNotifier {
   final Uuid _uuid;
 
   final List<QuestionResult> _results = <QuestionResult>[];
+
   int _currentIndex = 0;
   int? _selectedIndex;
+  String? _textAnswer;
   bool _answered = false;
 
   List<QuizSessionQuestion> get questions => List.unmodifiable(_questions);
+
   int get currentIndex => _currentIndex;
   int get totalCount => _questions.length;
   int? get selectedIndex => _selectedIndex;
+  String? get textAnswer => _textAnswer;
   bool get answered => _answered;
   bool get hasQuestions => _questions.isNotEmpty;
+
   bool get isLastQuestion => _currentIndex >= _questions.length - 1;
+
   int get correctCount => _results.where((result) => result.isCorrect).length;
-  int get incorrectCount => _results.where((result) => !result.isCorrect).length;
+
+  int get incorrectCount =>
+      _results.where((result) => !result.isCorrect).length;
+
   int get answeredCount => _results.length;
+
   List<QuestionResult> get results => List.unmodifiable(_results);
 
   QuizSessionQuestion get currentQuestion => _questions[_currentIndex];
@@ -51,10 +61,18 @@ class QuizSessionState extends ChangeNotifier {
     if (_answered) {
       return;
     }
+
     final question = currentQuestion;
+
+    if (question.correctIndex == null) {
+      return;
+    }
+
     final isCorrect = _quizEngine.isCorrect(question, selectedIndex);
+
     _selectedIndex = selectedIndex;
     _answered = true;
+
     _results.add(
       QuestionResult(
         questionId: question.question.id,
@@ -64,6 +82,36 @@ class QuizSessionState extends ChangeNotifier {
         answeredAt: DateTime.now(),
       ),
     );
+
+    notifyListeners();
+  }
+
+  void answerText(String enteredAnswer) {
+    if (_answered) {
+      return;
+    }
+
+    final question = currentQuestion;
+
+    if (question.question.answers.isEmpty) {
+      return;
+    }
+
+    final isCorrect = _quizEngine.isTextCorrect(question, enteredAnswer);
+
+    _textAnswer = enteredAnswer;
+    _answered = true;
+
+    _results.add(
+      QuestionResult(
+        questionId: question.question.id,
+        textAnswer: enteredAnswer,
+        correctTextAnswer: question.question.answers.first,
+        isCorrect: isCorrect,
+        answeredAt: DateTime.now(),
+      ),
+    );
+
     notifyListeners();
   }
 
@@ -71,10 +119,12 @@ class QuizSessionState extends ChangeNotifier {
     if (!isLastQuestion) {
       _currentIndex += 1;
       _selectedIndex = null;
+      _textAnswer = null;
       _answered = false;
       notifyListeners();
       return true;
     }
+
     return false;
   }
 
