@@ -1,7 +1,7 @@
 {
   "subject": "サンプル科目",
-  "title": "サンプル4択デッキ",
-  "version": "1.0",
+  "title": "サンプル問題デッキ",
+  "version": "1.1",
   "questions": [
     {
       "id": "sample-001",
@@ -22,6 +22,21 @@
       "explanation": "ログインやクラウド同期は行わず、端末のブラウザ内に保存します。",
       "tags": ["保存"],
       "difficulty": "normal"
+    },
+    {
+      "id": "sample-003",
+      "type": "text_input",
+      "question": "710年に造営された都の名前を答えなさい。",
+      "answers": [
+        "平城京",
+        "へいじょうきょう"
+      ],
+      "explanation": "710年に平城京が造営されました。",
+      "tags": [
+        "日本史",
+        "奈良時代"
+      ],
+      "difficulty": "easy"
     }
   ]
 }
