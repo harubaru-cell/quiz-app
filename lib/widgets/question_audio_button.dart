@@ -1,7 +1,8 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/audio_storage_service.dart';
+import '../services/web_audio_player.dart';
 
 class QuestionAudioButton extends StatefulWidget {
   const QuestionAudioButton({
@@ -16,7 +17,7 @@ class QuestionAudioButton extends StatefulWidget {
 }
 
 class _QuestionAudioButtonState extends State<QuestionAudioButton> {
-  final AudioPlayer _player = AudioPlayer();
+  final WebAudioPlayer _player = WebAudioPlayer();
 
   bool _isLoading = false;
 
@@ -27,13 +28,17 @@ class _QuestionAudioButtonState extends State<QuestionAudioButton> {
   }
 
   String _normalizeAssetPath(String path) {
-    final normalizedPath = path.replaceAll('\\', '/');
+    var normalizedPath = path.replaceAll('\\', '/');
 
-    if (normalizedPath.startsWith('assets/')) {
-      return normalizedPath.substring('assets/'.length);
+    while (normalizedPath.startsWith('/')) {
+      normalizedPath = normalizedPath.substring(1);
     }
 
-    return normalizedPath;
+    if (normalizedPath.startsWith('assets/')) {
+      return normalizedPath;
+    }
+
+    return 'assets/$normalizedPath';
   }
 
   String? _mimeTypeFromPath(String path) {
@@ -66,33 +71,16 @@ class _QuestionAudioButtonState extends State<QuestionAudioButton> {
     return null;
   }
 
-  Future<Source> _createSource() async {
-    final audioPath = widget.audioPath;
-    final storageService = AudioStorageService.instance;
+  Future<Uint8List> _loadAssetBytes(
+    String assetPath,
+  ) async {
+    final byteData = await rootBundle.load(
+      _normalizeAssetPath(assetPath),
+    );
 
-    if (storageService.isStoredAudioReference(audioPath)) {
-      final storageKey = storageService.getStorageKeyFromReference(audioPath);
-
-      final bytes = await storageService.loadAudio(storageKey);
-
-      if (bytes == null || bytes.isEmpty) {
-        throw StateError(
-          '端末内に音声データが見つかりません。',
-        );
-      }
-
-      return BytesSource(
-        bytes,
-        mimeType: _mimeTypeFromPath(storageKey),
-      );
-    }
-
-    if (_isNetworkAudio(audioPath)) {
-      return UrlSource(audioPath);
-    }
-
-    return AssetSource(
-      _normalizeAssetPath(audioPath),
+    return byteData.buffer.asUint8List(
+      byteData.offsetInBytes,
+      byteData.lengthInBytes,
     );
   }
 
@@ -106,11 +94,40 @@ class _QuestionAudioButtonState extends State<QuestionAudioButton> {
     });
 
     try {
-      await _player.stop();
+      final audioPath = widget.audioPath;
+      final storageService = AudioStorageService.instance;
 
-      final source = await _createSource();
+      if (storageService.isStoredAudioReference(audioPath)) {
+        final storageKey = storageService.getStorageKeyFromReference(audioPath);
 
-      await _player.play(source);
+        final bytes = await storageService.loadAudio(storageKey);
+
+        if (bytes == null || bytes.isEmpty) {
+          throw StateError(
+            '端末内に音声データが見つかりません。',
+          );
+        }
+
+        await _player.playBytes(
+          bytes,
+          mimeType: _mimeTypeFromPath(storageKey),
+        );
+      } else if (_isNetworkAudio(audioPath)) {
+        await _player.playUrl(audioPath);
+      } else {
+        final bytes = await _loadAssetBytes(audioPath);
+
+        if (bytes.isEmpty) {
+          throw StateError(
+            '音声ファイルが空です。',
+          );
+        }
+
+        await _player.playBytes(
+          bytes,
+          mimeType: _mimeTypeFromPath(audioPath),
+        );
+      }
     } catch (error) {
       if (!mounted) {
         return;
