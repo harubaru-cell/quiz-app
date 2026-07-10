@@ -6,10 +6,15 @@
     {
       "id": "sample-001",
       "type": "multiple_choice",
-      "question": "このアプリのVer.1で対応する問題形式はどれですか？",
-      "choices": ["4択問題", "穴埋め問題", "記述問題", "並べ替え問題"],
+      "question": "このアプリのVer.1.1で対応している問題形式はどれですか？",
+      "choices": [
+        "4択問題と記述式問題",
+        "4択問題のみ",
+        "複数選択問題のみ",
+        "並べ替え問題のみ"
+      ],
       "answer": 0,
-      "explanation": "Ver.1では multiple_choice の4択問題のみ対応します。",
+      "explanation": "Ver.1.1では、multiple_choiceの4択問題とtext_inputの記述式問題に対応しています。",
       "tags": ["仕様"],
       "difficulty": "easy"
     },
@@ -17,7 +22,12 @@
       "id": "sample-002",
       "type": "multiple_choice",
       "question": "学習データはどこに保存されますか？",
-      "choices": ["ブラウザ内", "外部サーバー", "メール", "紙のノート"],
+      "choices": [
+        "ブラウザ内",
+        "外部サーバー",
+        "メール",
+        "紙のノート"
+      ],
       "answer": 0,
       "explanation": "ログインやクラウド同期は行わず、端末のブラウザ内に保存します。",
       "tags": ["保存"],
