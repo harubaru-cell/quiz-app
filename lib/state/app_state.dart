@@ -8,10 +8,10 @@ import '../models/quiz_deck.dart';
 import '../models/quiz_history.dart';
 import '../repositories/deck_repository.dart';
 import '../repositories/history_repository.dart';
+import '../services/audio_storage_service.dart';
 import '../services/json_import_service.dart';
 import '../services/storage_service.dart';
 import '../services/zip_import_service.dart';
-import '../services/audio_storage_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState({
@@ -160,56 +160,97 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteDeck(String deckId) async {
-  QuizDeck? deckToDelete;
+    QuizDeck? deckToDelete;
 
-  for (final deck in _decks) {
-    if (deck.id == deckId) {
-      deckToDelete = deck;
-      break;
-    }
-  }
-
-  if (deckToDelete != null) {
-    final audioStorageService =
-        AudioStorageService.instance;
-
-    for (final question in deckToDelete.questions) {
-      final audio = question.audio;
-
-      if (audio == null ||
-          !audioStorageService
-              .isStoredAudioReference(audio)) {
-        continue;
-      }
-
-      final storageKey =
-          audioStorageService
-              .getStorageKeyFromReference(audio);
-
-      try {
-        await audioStorageService.deleteAudio(
-          storageKey,
-        );
-      } catch (_) {
-        // 音声の削除に失敗しても、
-        // デッキ本体の削除は続行する。
+    for (final deck in _decks) {
+      if (deck.id == deckId) {
+        deckToDelete = deck;
+        break;
       }
     }
+
+    if (deckToDelete != null) {
+      final audioStorageService = AudioStorageService.instance;
+
+      for (final question in deckToDelete.questions) {
+        final audio = question.audio;
+
+        if (audio == null ||
+            !audioStorageService.isStoredAudioReference(audio)) {
+          continue;
+        }
+
+        final storageKey =
+            audioStorageService.getStorageKeyFromReference(audio);
+
+        try {
+          await audioStorageService.deleteAudio(
+            storageKey,
+          );
+        } catch (_) {
+          // 音声の削除に失敗しても、
+          // デッキ本体の削除は続行する。
+        }
+      }
+    }
+
+    _decks = _decks.where((deck) => deck.id != deckId).toList();
+
+    _histories =
+        _histories.where((history) => history.deckId != deckId).toList();
+
+    _stats.remove(deckId);
+
+    await _deckRepository.saveDecks(_decks);
+    await _historyRepository.saveHistories(
+      _histories,
+    );
+    await _historyRepository.saveStats(_stats);
+
+    _message = 'デッキを削除しました。';
+    notifyListeners();
   }
 
-  _decks =
-      _decks.where((deck) => deck.id != deckId).toList();
+  Future<void> recordHistory(
+    QuizHistory history,
+  ) async {
+    _histories = <QuizHistory>[
+      ..._histories,
+      history,
+    ];
 
-  _histories = _histories
-      .where((history) => history.deckId != deckId)
-      .toList();
+    final previous = _stats[history.deckId] ?? DeckStats.empty(history.deckId);
 
-  _stats.remove(deckId);
+    final incorrectIds = Set<String>.from(
+      previous.incorrectQuestionIds,
+    );
 
-  await _deckRepository.saveDecks(_decks);
-  await _historyRepository.saveHistories(_histories);
-  await _historyRepository.saveStats(_stats);
+    for (final result in history.results) {
+      if (result.isCorrect) {
+        incorrectIds.remove(result.questionId);
+      } else {
+        incorrectIds.add(result.questionId);
+      }
+    }
 
-  _message = 'デッキを削除しました。';
-  notifyListeners();
+    _stats[history.deckId] = previous.copyWith(
+      attemptCount: previous.attemptCount + 1,
+      totalAnswered: previous.totalAnswered + history.totalAnswered,
+      totalCorrect: previous.totalCorrect + history.correctCount,
+      lastPlayedAt: history.playedAt,
+      incorrectQuestionIds: incorrectIds,
+    );
+
+    await _historyRepository.saveHistories(
+      _histories,
+    );
+    await _historyRepository.saveStats(_stats);
+
+    notifyListeners();
+  }
+
+  void clearMessage() {
+    _message = null;
+    notifyListeners();
+  }
 }
