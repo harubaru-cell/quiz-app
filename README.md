@@ -104,7 +104,7 @@ GitHub側の設定:
 次回以降、Flutter SDKが使える環境では次の流れで更新します。
 
 ```powershell
-flutter build web --release --base-href "./"
+flutter build web --release --base-href "/flutter-chatgpt-4-json-json-ver/"
 Copy-Item -Path build\web\* -Destination docs -Recurse -Force
 ```
 
