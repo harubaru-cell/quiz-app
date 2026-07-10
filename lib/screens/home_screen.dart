@@ -15,12 +15,19 @@ class HomeScreen extends StatelessWidget {
     return Consumer<AppState>(
       builder: (context, appState, _) {
         final message = appState.message;
+
         if (message != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) {
               return;
             }
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+              ),
+            );
+
             context.read<AppState>().clearMessage();
           });
         }
@@ -30,28 +37,44 @@ class HomeScreen extends StatelessWidget {
             title: const Text('クイズ学習'),
             actions: [
               IconButton(
-                tooltip: 'JSON追加',
+                tooltip: 'JSON・ZIPファイル追加',
                 onPressed: appState.importDeckFromFile,
                 icon: const Icon(Icons.add),
               ),
             ],
           ),
           body: appState.isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
               : appState.decks.isEmpty
-                  ? EmptyState(onImport: appState.importDeckFromFile)
+                  ? EmptyState(
+                      onImport: appState.importDeckFromFile,
+                    )
                   : RefreshIndicator(
                       onRefresh: appState.load,
                       child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        padding: const EdgeInsets.fromLTRB(
+                          16,
+                          12,
+                          16,
+                          24,
+                        ),
                         itemCount: appState.decks.length,
                         itemBuilder: (context, index) {
                           final deck = appState.decks[index];
+
                           return DeckCard(
                             deck: deck,
                             stats: appState.statsFor(deck.id),
-                            onTap: () => _openDeck(context, deck),
-                            onDelete: () => _confirmDelete(context, deck),
+                            onTap: () => _openDeck(
+                              context,
+                              deck,
+                            ),
+                            onDelete: () => _confirmDelete(
+                              context,
+                              deck,
+                            ),
                           );
                         },
                       ),
@@ -61,27 +84,38 @@ class HomeScreen extends StatelessWidget {
               : FloatingActionButton.extended(
                   onPressed: appState.importDeckFromFile,
                   icon: const Icon(Icons.upload_file),
-                  label: const Text('JSON追加'),
+                  label: const Text('JSON・ZIP追加'),
                 ),
         );
       },
     );
   }
 
-  void _openDeck(BuildContext context, QuizDeck deck) {
+  void _openDeck(
+    BuildContext context,
+    QuizDeck deck,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DeckSettingsScreen(deck: deck),
+        builder: (_) => DeckSettingsScreen(
+          deck: deck,
+        ),
       ),
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, QuizDeck deck) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    QuizDeck deck,
+  ) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('デッキを削除しますか？'),
-        content: Text('「${deck.title}」と学習履歴をこの端末から削除します。'),
+        content: Text(
+          '「${deck.title}」と学習履歴、保存された音声を'
+          'この端末から削除します。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -94,8 +128,11 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
     );
+
     if (shouldDelete == true && context.mounted) {
-      await context.read<AppState>().deleteDeck(deck.id);
+      await context.read<AppState>().deleteDeck(
+            deck.id,
+          );
     }
   }
 }
