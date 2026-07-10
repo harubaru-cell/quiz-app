@@ -40,6 +40,7 @@ class QuizQuestion {
     required this.id,
     required this.type,
     required this.question,
+    this.audio,
     this.choices = const <String>[],
     this.answer,
     this.answers = const <String>[],
@@ -51,6 +52,9 @@ class QuizQuestion {
   final String id;
   final QuestionType type;
   final String question;
+
+  // 音声がある問題で使用
+  final String? audio;
 
   // 4択問題で使用
   final List<String> choices;
@@ -66,6 +70,7 @@ class QuizQuestion {
   factory QuizQuestion.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
     final question = json['question'];
+    final rawAudio = json['audio'];
 
     if (id is! String || id.trim().isEmpty) {
       throw const FormatException(
@@ -78,6 +83,14 @@ class QuizQuestion {
         '問題 $id の question が空です。',
       );
     }
+
+    if (rawAudio != null && (rawAudio is! String || rawAudio.trim().isEmpty)) {
+      throw FormatException(
+        '問題 $id の audio は、空でない文字列にしてください。',
+      );
+    }
+
+    final audio = rawAudio is String ? rawAudio.trim() : null;
 
     final type = QuestionType.fromJson(
       json['type'] as String? ?? '',
@@ -142,6 +155,7 @@ class QuizQuestion {
       id: id,
       type: type,
       question: question,
+      audio: audio,
       choices: choices,
       answer: answer,
       answers: answers,
@@ -158,6 +172,7 @@ class QuizQuestion {
       'id': id,
       'type': type.value,
       'question': question,
+      if (audio != null) 'audio': audio,
       'explanation': explanation,
       'tags': tags,
       'difficulty': difficulty.value,
