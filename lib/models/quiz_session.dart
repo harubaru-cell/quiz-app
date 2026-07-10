@@ -7,6 +7,7 @@ enum QuestionCountOption {
   all(null, '全問');
 
   const QuestionCountOption(this.limit, this.label);
+
   final int? limit;
   final String label;
 }
@@ -14,11 +15,13 @@ enum QuestionCountOption {
 class QuizSessionQuestion {
   const QuizSessionQuestion({
     required this.question,
-    required this.displayChoices,
-    required this.correctIndex,
+    this.displayChoices = const <String>[],
+    this.correctIndex,
   });
 
   final QuizQuestion question;
+
+  // 4択問題のときだけ使用
   final List<String> displayChoices;
-  final int correctIndex;
+  final int? correctIndex;
 }

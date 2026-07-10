@@ -38,10 +38,15 @@ class QuizScreen extends StatelessWidget {
             children: [
               Text(
                 question.question,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(height: 1.45),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(height: 1.45),
               ),
               const SizedBox(height: 20),
-              for (var index = 0; index < item.displayChoices.length; index++) ...[
+              for (var index = 0;
+                  index < item.displayChoices.length;
+                  index++) ...[
                 ChoiceButton(
                   index: index,
                   label: item.displayChoices[index],
@@ -62,7 +67,9 @@ class QuizScreen extends StatelessWidget {
               ? BottomActionArea(
                   child: FilledButton.icon(
                     onPressed: () => _nextOrFinish(context, session),
-                    icon: Icon(session.isLastQuestion ? Icons.flag : Icons.navigate_next),
+                    icon: Icon(session.isLastQuestion
+                        ? Icons.flag
+                        : Icons.navigate_next),
                     label: Text(session.isLastQuestion ? '結果を見る' : '次へ'),
                   ),
                 )
@@ -72,7 +79,8 @@ class QuizScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _nextOrFinish(BuildContext context, QuizSessionState session) async {
+  Future<void> _nextOrFinish(
+      BuildContext context, QuizSessionState session) async {
     if (session.moveNext()) {
       return;
     }
@@ -88,7 +96,8 @@ class QuizScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _finishEarly(BuildContext context, QuizSessionState session) async {
+  Future<void> _finishEarly(
+      BuildContext context, QuizSessionState session) async {
     if (session.answeredCount == 0) {
       Navigator.of(context).pop();
       return;
@@ -141,7 +150,9 @@ class _AnswerPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isCorrect ? colorScheme.primaryContainer : colorScheme.errorContainer,
+        color: isCorrect
+            ? colorScheme.primaryContainer
+            : colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -152,12 +163,20 @@ class _AnswerPanel extends StatelessWidget {
             Text(
               isCorrect ? '正解' : '不正解',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: isCorrect ? colorScheme.onPrimaryContainer : colorScheme.onErrorContainer,
+                    color: isCorrect
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onErrorContainer,
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
-            Text('正解: ${item.correctIndex + 1}. ${item.displayChoices[item.correctIndex]}'),
+            if (item.correctIndex != null)
+              Text(
+                '正解: ${item.correctIndex! + 1}. '
+                '${item.displayChoices[item.correctIndex!]}',
+              )
+            else if (item.question.answers.isNotEmpty)
+              Text('正解: ${item.question.answers.first}'),
             if (item.question.explanation.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(item.question.explanation),

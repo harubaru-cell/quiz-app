@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/quiz_deck.dart';
 import '../models/quiz_history.dart';
-import '../models/quiz_session.dart';
 import '../utils/date_format.dart';
 import '../widgets/bottom_action_area.dart';
 import 'deck_settings_screen.dart';
@@ -19,7 +18,9 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accuracy = history.totalAnswered == 0 ? 0.0 : history.correctCount / history.totalAnswered;
+    final accuracy = history.totalAnswered == 0
+        ? 0.0
+        : history.correctCount / history.totalAnswered;
     final wrongIds = history.results
         .where((result) => !result.isCorrect)
         .map((result) => result.questionId)
@@ -56,7 +57,9 @@ class ResultScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.tonalIcon(
-                onPressed: wrongIds.isEmpty ? null : () => _retryWrongOnly(context, wrongIds),
+                onPressed: wrongIds.isEmpty
+                    ? null
+                    : () => _retryWrongOnly(context, wrongIds),
                 icon: const Icon(Icons.replay),
                 label: const Text('間違えた問題だけ挑戦'),
               ),
@@ -65,7 +68,8 @@ class ResultScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: TextButton.icon(
-                onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                onPressed: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
                 icon: const Icon(Icons.home_outlined),
                 label: const Text('ホームへ戻る'),
               ),

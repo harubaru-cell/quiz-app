@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -94,7 +93,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteDeck(String deckId) async {
     _decks = _decks.where((deck) => deck.id != deckId).toList();
-    _histories = _histories.where((history) => history.deckId != deckId).toList();
+    _histories =
+        _histories.where((history) => history.deckId != deckId).toList();
     _stats.remove(deckId);
     await _deckRepository.saveDecks(_decks);
     await _historyRepository.saveHistories(_histories);

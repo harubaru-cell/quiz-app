@@ -29,7 +29,8 @@ class QuizHistory {
       incorrectCount: json['incorrectCount'] as int,
       completed: json['completed'] as bool,
       results: (json['results'] as List)
-          .map((item) => QuestionResult.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) =>
+              QuestionResult.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
     );
   }
@@ -51,23 +52,34 @@ class QuizHistory {
 class QuestionResult {
   const QuestionResult({
     required this.questionId,
-    required this.selectedAnswer,
-    required this.correctAnswer,
+    this.selectedAnswer,
+    this.correctAnswer,
+    this.textAnswer,
+    this.correctTextAnswer,
     required this.isCorrect,
     required this.answeredAt,
   });
 
   final String questionId;
-  final int selectedAnswer;
-  final int correctAnswer;
+
+  // 4択問題で使用
+  final int? selectedAnswer;
+  final int? correctAnswer;
+
+  // 記述式問題で使用
+  final String? textAnswer;
+  final String? correctTextAnswer;
+
   final bool isCorrect;
   final DateTime answeredAt;
 
   factory QuestionResult.fromJson(Map<String, dynamic> json) {
     return QuestionResult(
       questionId: json['questionId'] as String,
-      selectedAnswer: json['selectedAnswer'] as int,
-      correctAnswer: json['correctAnswer'] as int,
+      selectedAnswer: json['selectedAnswer'] as int?,
+      correctAnswer: json['correctAnswer'] as int?,
+      textAnswer: json['textAnswer'] as String?,
+      correctTextAnswer: json['correctTextAnswer'] as String?,
       isCorrect: json['isCorrect'] as bool,
       answeredAt: DateTime.parse(json['answeredAt'] as String),
     );
@@ -76,8 +88,10 @@ class QuestionResult {
   Map<String, dynamic> toJson() {
     return {
       'questionId': questionId,
-      'selectedAnswer': selectedAnswer,
-      'correctAnswer': correctAnswer,
+      if (selectedAnswer != null) 'selectedAnswer': selectedAnswer,
+      if (correctAnswer != null) 'correctAnswer': correctAnswer,
+      if (textAnswer != null) 'textAnswer': textAnswer,
+      if (correctTextAnswer != null) 'correctTextAnswer': correctTextAnswer,
       'isCorrect': isCorrect,
       'answeredAt': answeredAt.toIso8601String(),
     };
