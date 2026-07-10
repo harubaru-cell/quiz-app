@@ -16,23 +16,33 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.quiz_outlined, size: 56),
+            const Icon(
+              Icons.quiz_outlined,
+              size: 56,
+            ),
             const SizedBox(height: 16),
             Text(
-              'JSONデッキを追加してください',
+              'クイズデッキを追加してください',
               style: Theme.of(context).textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             const Text(
-              'ChatGPTで作成した4択クイズJSONを読み込むと、ここにデッキが表示されます。',
+              'JSONファイル、または音声付きのZIPファイルを読み込むと、'
+              'ここにデッキが表示されます。',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'JSONは通常の4択・記述式問題、'
+              'ZIPはJSONと音声をまとめたデッキに対応しています。',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onImport,
               icon: const Icon(Icons.add),
-              label: const Text('JSONを追加'),
+              label: const Text('JSON・ZIPを追加'),
             ),
           ],
         ),
