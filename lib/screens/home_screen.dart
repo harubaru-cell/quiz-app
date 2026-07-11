@@ -10,6 +10,8 @@ import 'deck_settings_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  static const String _appVersion = '1.3.0';
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AppState>(
@@ -79,6 +81,24 @@ class HomeScreen extends StatelessWidget {
                         },
                       ),
                     ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                10,
+              ),
+              child: Text(
+                'アプリ Ver.$_appVersion',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ),
           floatingActionButton: appState.decks.isEmpty
               ? null
               : FloatingActionButton.extended(
