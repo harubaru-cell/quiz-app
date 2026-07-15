@@ -403,6 +403,20 @@ class AppState extends ChangeNotifier {
   Future<void> _saveImportedDeck(
     QuizDeck deck,
   ) async {
+    final validQuestionIds =
+        deck.questions.map((question) => question.id).toSet();
+    final progressByQuestion = _questionProgress[deck.id];
+
+    if (progressByQuestion != null) {
+      progressByQuestion.removeWhere(
+        (questionId, _) => !validQuestionIds.contains(questionId),
+      );
+
+      if (progressByQuestion.isEmpty) {
+        _questionProgress.remove(deck.id);
+      }
+    }
+
     _decks = <QuizDeck>[
       ..._decks.where(
         (item) => item.id != deck.id,
@@ -417,6 +431,9 @@ class AppState extends ChangeNotifier {
 
     await _deckRepository.saveDecks(_decks);
     await _historyRepository.saveStats(_stats);
+    await _questionProgressRepository.saveProgress(
+      _createQuestionProgressSnapshot(),
+    );
 
     _message = '「${deck.title}」を追加しました。';
     notifyListeners();
@@ -481,12 +498,20 @@ class AppState extends ChangeNotifier {
         _histories.where((history) => history.deckId != deckId).toList();
 
     _stats.remove(deckId);
+    _questionProgress.remove(deckId);
+    _studyCycles.remove(deckId);
 
     await _deckRepository.saveDecks(_decks);
     await _historyRepository.saveHistories(
       _histories,
     );
     await _historyRepository.saveStats(_stats);
+    await _questionProgressRepository.saveProgress(
+      _createQuestionProgressSnapshot(),
+    );
+    await _studyCycleRepository.saveCycles(
+      _createStudyCycleSnapshot(),
+    );
 
     _message = 'デッキを削除しました。';
     notifyListeners();

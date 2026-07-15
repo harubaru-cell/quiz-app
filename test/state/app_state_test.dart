@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -342,6 +343,199 @@ void main() {
     expect(reloaded.studyCycleFor('deck-1')!.isComplete, isTrue);
   });
 
+  test('デッキ更新で削除された問題の進捗だけを除外する', () async {
+    final appState = AppState();
+    final firstResult = QuestionResult(
+      questionId: 'question-1',
+      isCorrect: false,
+      answeredAt: DateTime.utc(2026, 7, 16, 10),
+    );
+    final secondResult = QuestionResult(
+      questionId: 'question-2',
+      isCorrect: true,
+      answeredAt: DateTime.utc(2026, 7, 16, 10, 1),
+    );
+
+    await appState.load();
+    await appState.importDeckFromBytes(
+      _deckBytes(
+        deckId: 'deck-1',
+        questionIds: const <String>['question-1', 'question-2'],
+        version: '1.3',
+      ),
+    );
+    await appState.recordQuestionResult('deck-1', firstResult);
+    await appState.recordQuestionResult('deck-1', secondResult);
+    await appState.recordHistory(
+      _historyForDeck(
+        id: 'history-1',
+        deckId: 'deck-1',
+        results: <QuestionResult>[firstResult, secondResult],
+      ),
+    );
+
+    final originalDeck = appState.decks.single;
+    final originalCycle = await appState.startStudyCycle(
+      deckId: originalDeck.id,
+      deckSignature: originalDeck.contentSignature,
+      orderedQuestionIds:
+          originalDeck.questions.map((question) => question.id).toList(),
+      batchSize: 10,
+    );
+
+    await appState.importDeckFromBytes(
+      _deckBytes(
+        deckId: 'deck-1',
+        questionIds: const <String>['question-2', 'question-3'],
+      ),
+    );
+
+    final updatedDeck = appState.decks.single;
+    final remainingProgressIds = appState
+        .questionProgressForDeck('deck-1')
+        .map((progress) => progress.questionId)
+        .toSet();
+
+    expect(remainingProgressIds, <String>{'question-2'});
+    expect(
+      appState.questionProgressFor('deck-1', 'question-1').status,
+      QuestionProgressStatus.unanswered,
+    );
+    expect(
+      appState.questionProgressFor('deck-1', 'question-2').answerCount,
+      1,
+    );
+    expect(
+      appState.questionProgressFor('deck-1', 'question-3').status,
+      QuestionProgressStatus.unanswered,
+    );
+    expect(appState.statsFor('deck-1').attemptCount, 1);
+    expect(appState.statsFor('deck-1').totalAnswered, 2);
+    expect(appState.studyCycleFor('deck-1')!.cycleId, originalCycle!.cycleId);
+    expect(
+      appState.studyCycleFor('deck-1')!.deckSignature,
+      isNot(updatedDeck.contentSignature),
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    final savedHistories = jsonDecode(
+      preferences.getString(StorageService.historiesKey)!,
+    ) as List;
+    expect(savedHistories, hasLength(1));
+    expect(savedHistories.single['id'], 'history-1');
+
+    final reloaded = AppState();
+    await reloaded.load();
+
+    expect(
+      reloaded
+          .questionProgressForDeck('deck-1')
+          .map((progress) => progress.questionId)
+          .toSet(),
+      <String>{'question-2'},
+    );
+    expect(
+      reloaded.questionProgressFor('deck-1', 'question-3').status,
+      QuestionProgressStatus.unanswered,
+    );
+    expect(reloaded.statsFor('deck-1').attemptCount, 1);
+    expect(
+      reloaded.studyCycleFor('deck-1')!.deckSignature,
+      isNot(reloaded.decks.single.contentSignature),
+    );
+  });
+
+  test('デッキ削除で対象の進捗と一周だけを保存データから削除する', () async {
+    final appState = AppState();
+    final firstResult = QuestionResult(
+      questionId: 'question-a',
+      isCorrect: false,
+      answeredAt: DateTime.utc(2026, 7, 16, 11),
+    );
+    final secondResult = QuestionResult(
+      questionId: 'question-b',
+      isCorrect: true,
+      answeredAt: DateTime.utc(2026, 7, 16, 11, 1),
+    );
+
+    await appState.load();
+    await appState.importDeckFromBytes(
+      _deckBytes(
+        deckId: 'deck-a',
+        questionIds: const <String>['question-a'],
+      ),
+    );
+    await appState.importDeckFromBytes(
+      _deckBytes(
+        deckId: 'deck-b',
+        questionIds: const <String>['question-b'],
+      ),
+    );
+    await appState.recordQuestionResult('deck-a', firstResult);
+    await appState.recordQuestionResult('deck-b', secondResult);
+
+    for (final deck in appState.decks) {
+      await appState.startStudyCycle(
+        deckId: deck.id,
+        deckSignature: deck.contentSignature,
+        orderedQuestionIds:
+            deck.questions.map((question) => question.id).toList(),
+        batchSize: 10,
+      );
+    }
+
+    await appState.recordHistory(
+      _historyForDeck(
+        id: 'history-a',
+        deckId: 'deck-a',
+        results: <QuestionResult>[firstResult],
+      ),
+    );
+    await appState.recordHistory(
+      _historyForDeck(
+        id: 'history-b',
+        deckId: 'deck-b',
+        results: <QuestionResult>[secondResult],
+      ),
+    );
+
+    final remainingCycleId = appState.studyCycleFor('deck-b')!.cycleId;
+    await appState.deleteDeck('deck-a');
+
+    expect(appState.decks.map((deck) => deck.id), <String>['deck-b']);
+    expect(appState.questionProgressForDeck('deck-a'), isEmpty);
+    expect(appState.studyCycleFor('deck-a'), isNull);
+    expect(appState.statsFor('deck-a').attemptCount, 0);
+    expect(
+      appState.questionProgressFor('deck-b', 'question-b').answerCount,
+      1,
+    );
+    expect(appState.studyCycleFor('deck-b')!.cycleId, remainingCycleId);
+    expect(appState.statsFor('deck-b').attemptCount, 1);
+
+    final preferences = await SharedPreferences.getInstance();
+    final savedHistories = jsonDecode(
+      preferences.getString(StorageService.historiesKey)!,
+    ) as List;
+    expect(
+      savedHistories.map((item) => (item as Map)['deckId']).toSet(),
+      <String>{'deck-b'},
+    );
+
+    final reloaded = AppState();
+    await reloaded.load();
+
+    expect(reloaded.decks.map((deck) => deck.id), <String>['deck-b']);
+    expect(reloaded.questionProgressForDeck('deck-a'), isEmpty);
+    expect(reloaded.studyCycleFor('deck-a'), isNull);
+    expect(
+      reloaded.questionProgressFor('deck-b', 'question-b').answerCount,
+      1,
+    );
+    expect(reloaded.studyCycleFor('deck-b')!.cycleId, remainingCycleId);
+    expect(reloaded.statsFor('deck-b').attemptCount, 1);
+  });
+
   test('同じ履歴IDを再保存しても履歴と挑戦回数を二重加算しない', () async {
     final appState = AppState();
     final history = _historyForIdempotencyTest();
@@ -407,6 +601,54 @@ QuizHistory _historyForIdempotencyTest() {
     incorrectCount: 0,
     completed: true,
     results: <QuestionResult>[result],
+  );
+}
+
+Uint8List _deckBytes({
+  required String deckId,
+  required List<String> questionIds,
+  String version = '1.4',
+}) {
+  final deck = <String, dynamic>{
+    'deckId': deckId,
+    'subject': 'テスト科目',
+    'title': '$deckId テストデッキ',
+    'version': version,
+    'questions': questionIds
+        .map(
+          (questionId) => <String, dynamic>{
+            'id': questionId,
+            'type': 'multiple_choice',
+            'question': '$questionId の問題',
+            'choices': <String>['A', 'B', 'C', 'D'],
+            'answer': 0,
+            'explanation': '解説',
+            'tags': <String>[],
+            'difficulty': 'normal',
+          },
+        )
+        .toList(),
+  };
+
+  return Uint8List.fromList(utf8.encode(jsonEncode(deck)));
+}
+
+QuizHistory _historyForDeck({
+  required String id,
+  required String deckId,
+  required List<QuestionResult> results,
+}) {
+  final correctCount = results.where((result) => result.isCorrect).length;
+
+  return QuizHistory(
+    id: id,
+    deckId: deckId,
+    playedAt: results.last.answeredAt,
+    totalAnswered: results.length,
+    correctCount: correctCount,
+    incorrectCount: results.length - correctCount,
+    completed: true,
+    results: results,
   );
 }
 
