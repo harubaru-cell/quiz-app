@@ -5,6 +5,7 @@ import '../models/quiz_deck.dart';
 import '../models/quiz_question.dart';
 import '../models/quiz_session.dart';
 import '../services/quiz_engine.dart';
+import '../state/app_state.dart';
 import '../state/quiz_session_state.dart';
 import '../widgets/bottom_action_area.dart';
 import 'quiz_screen.dart';
@@ -305,12 +306,18 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
       return;
     }
 
+    final appState = context.read<AppState>();
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => ChangeNotifierProvider(
           create: (_) => QuizSessionState(
             deck: widget.deck,
             questions: questions,
+            questionResultRecorder: (result) => appState.recordQuestionResult(
+              widget.deck.id,
+              result,
+            ),
           ),
           child: const QuizScreen(),
         ),

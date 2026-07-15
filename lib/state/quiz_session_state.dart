@@ -6,18 +6,23 @@ import '../models/quiz_history.dart';
 import '../models/quiz_session.dart';
 import '../services/quiz_engine.dart';
 
+typedef QuestionResultRecorder = Future<void> Function(QuestionResult result);
+
 class QuizSessionState extends ChangeNotifier {
   QuizSessionState({
     required this.deck,
     required List<QuizSessionQuestion> questions,
+    QuestionResultRecorder? questionResultRecorder,
     QuizEngine? quizEngine,
     Uuid? uuid,
   })  : _questions = questions,
+        _questionResultRecorder = questionResultRecorder,
         _quizEngine = quizEngine ?? QuizEngine(),
         _uuid = uuid ?? const Uuid();
 
   final QuizDeck deck;
   final List<QuizSessionQuestion> _questions;
+  final QuestionResultRecorder? _questionResultRecorder;
   final QuizEngine _quizEngine;
   final Uuid _uuid;
 
@@ -27,6 +32,7 @@ class QuizSessionState extends ChangeNotifier {
   int? _selectedIndex;
   String? _textAnswer;
   bool _answered = false;
+  bool _isSavingProgress = false;
 
   List<QuizSessionQuestion> get questions => List.unmodifiable(_questions);
 
@@ -35,6 +41,7 @@ class QuizSessionState extends ChangeNotifier {
   int? get selectedIndex => _selectedIndex;
   String? get textAnswer => _textAnswer;
   bool get answered => _answered;
+  bool get isSavingProgress => _isSavingProgress;
   bool get hasQuestions => _questions.isNotEmpty;
 
   bool get isLastQuestion => _currentIndex >= _questions.length - 1;
@@ -57,7 +64,7 @@ class QuizSessionState extends ChangeNotifier {
         .toList();
   }
 
-  void answer(int selectedIndex) {
+  Future<void> answer(int selectedIndex) async {
     if (_answered) {
       return;
     }
@@ -73,7 +80,7 @@ class QuizSessionState extends ChangeNotifier {
     _selectedIndex = selectedIndex;
     _answered = true;
 
-    _results.add(
+    await _recordResult(
       QuestionResult(
         questionId: question.question.id,
         selectedAnswer: selectedIndex,
@@ -82,11 +89,9 @@ class QuizSessionState extends ChangeNotifier {
         answeredAt: DateTime.now(),
       ),
     );
-
-    notifyListeners();
   }
 
-  void answerText(String enteredAnswer) {
+  Future<void> answerText(String enteredAnswer) async {
     if (_answered) {
       return;
     }
@@ -102,7 +107,7 @@ class QuizSessionState extends ChangeNotifier {
     _textAnswer = enteredAnswer;
     _answered = true;
 
-    _results.add(
+    await _recordResult(
       QuestionResult(
         questionId: question.question.id,
         textAnswer: enteredAnswer,
@@ -111,11 +116,34 @@ class QuizSessionState extends ChangeNotifier {
         answeredAt: DateTime.now(),
       ),
     );
+  }
 
+  Future<void> _recordResult(QuestionResult result) async {
+    _results.add(result);
+
+    final recorder = _questionResultRecorder;
+
+    if (recorder == null) {
+      notifyListeners();
+      return;
+    }
+
+    _isSavingProgress = true;
     notifyListeners();
+
+    try {
+      await recorder(result);
+    } finally {
+      _isSavingProgress = false;
+      notifyListeners();
+    }
   }
 
   bool moveNext() {
+    if (!_answered || _isSavingProgress) {
+      return false;
+    }
+
     if (!isLastQuestion) {
       _currentIndex += 1;
       _selectedIndex = null;

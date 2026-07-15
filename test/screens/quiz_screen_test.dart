@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -65,6 +67,43 @@ void main() {
     expect(find.text('正解'), findsOneWidget);
     expect(find.text('選択肢2が正解です。'), findsOneWidget);
   });
+
+  testWidgets('問題別進捗の保存中は画面遷移操作を無効にする', (tester) async {
+    final saveCompleter = Completer<void>();
+    const question = QuizQuestion(
+      id: 'choice-1',
+      type: QuestionType.multipleChoice,
+      question: '正しい選択肢を選んでください。',
+      choices: <String>['選択肢1', '選択肢2', '選択肢3', '選択肢4'],
+      answer: 1,
+      explanation: '',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    final session = _createSession(
+      question,
+      recorder: (_) => saveCompleter.future,
+    );
+
+    await tester.pumpWidget(_buildApp(session));
+    await tester.tap(find.text('2. 選択肢2'));
+    await tester.pump();
+
+    final nextButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '進捗を保存中'),
+    );
+    final finishButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, '途中終了'),
+    );
+
+    expect(nextButton.onPressed, isNull);
+    expect(finishButton.onPressed, isNull);
+
+    saveCompleter.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('結果を見る'), findsOneWidget);
+  });
 }
 
 Widget _buildApp(QuizSessionState session) {
@@ -76,7 +115,10 @@ Widget _buildApp(QuizSessionState session) {
   );
 }
 
-QuizSessionState _createSession(QuizQuestion question) {
+QuizSessionState _createSession(
+  QuizQuestion question, {
+  QuestionResultRecorder? recorder,
+}) {
   final deck = QuizDeck(
     id: 'deck-1',
     subject: 'テスト',
@@ -96,5 +138,6 @@ QuizSessionState _createSession(QuizQuestion question) {
         correctIndex: question.answer,
       ),
     ],
+    questionResultRecorder: recorder,
   );
 }

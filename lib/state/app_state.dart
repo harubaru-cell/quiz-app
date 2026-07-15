@@ -113,6 +113,56 @@ class AppState extends ChangeNotifier {
     _questionProgress = progressByDeck;
   }
 
+  Future<void> recordQuestionResult(
+    String deckId,
+    QuestionResult result,
+  ) async {
+    final progressByQuestion = _questionProgress.putIfAbsent(
+      deckId,
+      () => <String, QuestionProgress>{},
+    );
+    final current = progressByQuestion[result.questionId] ??
+        QuestionProgress.unanswered(
+          deckId: deckId,
+          questionId: result.questionId,
+        );
+
+    progressByQuestion[result.questionId] = current.recordAnswer(
+      isCorrect: result.isCorrect,
+      answeredAt: result.answeredAt,
+    );
+
+    try {
+      await _questionProgressRepository.saveProgress(
+        _createQuestionProgressSnapshot(),
+      );
+    } catch (error) {
+      _message = '問題別進捗の保存に失敗しました: $error';
+    }
+
+    notifyListeners();
+  }
+
+  QuestionProgressSnapshot _createQuestionProgressSnapshot() {
+    final items = _questionProgress.values
+        .expand((progressByQuestion) => progressByQuestion.values)
+        .toList()
+      ..sort((left, right) {
+        final deckComparison = left.deckId.compareTo(right.deckId);
+
+        if (deckComparison != 0) {
+          return deckComparison;
+        }
+
+        return left.questionId.compareTo(right.questionId);
+      });
+
+    return QuestionProgressSnapshot(
+      schemaVersion: QuestionProgressSnapshot.currentSchemaVersion,
+      items: items,
+    );
+  }
+
   Future<void> importDeckFromFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(

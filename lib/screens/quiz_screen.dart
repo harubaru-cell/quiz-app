@@ -35,7 +35,9 @@ class QuizScreen extends StatelessWidget {
             ),
             actions: [
               TextButton(
-                onPressed: () => _finishEarly(context, session),
+                onPressed: session.isSavingProgress
+                    ? null
+                    : () => _finishEarly(context, session),
                 child: const Text('途中終了'),
               ),
             ],
@@ -74,7 +76,9 @@ class QuizScreen extends StatelessWidget {
                     isAnswered: session.answered,
                     isSelected: session.selectedIndex == index,
                     isCorrect: item.correctIndex == index,
-                    onPressed: () => session.answer(index),
+                    onPressed: () async {
+                      await session.answer(index);
+                    },
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -95,15 +99,25 @@ class QuizScreen extends StatelessWidget {
           bottomNavigationBar: session.answered
               ? BottomActionArea(
                   child: FilledButton.icon(
-                    onPressed: () => _nextOrFinish(
-                      context,
-                      session,
-                    ),
+                    onPressed: session.isSavingProgress
+                        ? null
+                        : () => _nextOrFinish(
+                              context,
+                              session,
+                            ),
                     icon: Icon(
-                      session.isLastQuestion ? Icons.flag : Icons.navigate_next,
+                      session.isSavingProgress
+                          ? Icons.sync
+                          : session.isLastQuestion
+                              ? Icons.flag
+                              : Icons.navigate_next,
                     ),
                     label: Text(
-                      session.isLastQuestion ? '結果を見る' : '次へ',
+                      session.isSavingProgress
+                          ? '進捗を保存中'
+                          : session.isLastQuestion
+                              ? '結果を見る'
+                              : '次へ',
                     ),
                   ),
                 )
@@ -117,6 +131,10 @@ class QuizScreen extends StatelessWidget {
     BuildContext context,
     QuizSessionState session,
   ) async {
+    if (!session.answered || session.isSavingProgress) {
+      return;
+    }
+
     if (session.moveNext()) {
       return;
     }
@@ -143,6 +161,10 @@ class QuizScreen extends StatelessWidget {
     BuildContext context,
     QuizSessionState session,
   ) async {
+    if (session.isSavingProgress) {
+      return;
+    }
+
     if (session.answeredCount == 0) {
       Navigator.of(context).pop();
       return;
@@ -210,14 +232,14 @@ class _TextInputAnswerState extends State<_TextInputAnswer> {
     return !widget.session.answered;
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_canSubmit) {
       return;
     }
 
     FocusScope.of(context).unfocus();
 
-    widget.session.answerText(_controller.text);
+    await widget.session.answerText(_controller.text);
   }
 
   @override
