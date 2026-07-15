@@ -68,4 +68,72 @@ void main() {
     expect(progress.consecutiveCorrectCount, 0);
     expect(progress.latestIsCorrect, isFalse);
   });
+
+  test('学習範囲フィルターが3つの進捗状態を正しく分類する', () {
+    expect(
+      QuestionProgressFilter.unanswered.includes(
+        QuestionProgressStatus.unanswered,
+      ),
+      isTrue,
+    );
+    expect(
+      QuestionProgressFilter.unanswered.includes(
+        QuestionProgressStatus.needsReview,
+      ),
+      isFalse,
+    );
+    expect(
+      QuestionProgressFilter.incorrect.includes(
+        QuestionProgressStatus.needsReview,
+      ),
+      isTrue,
+    );
+    expect(
+      QuestionProgressFilter.incorrect.includes(
+        QuestionProgressStatus.unanswered,
+      ),
+      isFalse,
+    );
+    expect(
+      QuestionProgressFilter.unmastered.includes(
+        QuestionProgressStatus.unanswered,
+      ),
+      isTrue,
+    );
+    expect(
+      QuestionProgressFilter.unmastered.includes(
+        QuestionProgressStatus.needsReview,
+      ),
+      isTrue,
+    );
+    expect(
+      QuestionProgressFilter.unmastered.includes(
+        QuestionProgressStatus.correct,
+      ),
+      isFalse,
+    );
+  });
+
+  test('回答済みで最新の正誤が欠けたデータは要復習として扱う', () {
+    final progress = QuestionProgress(
+      deckId: 'deck-1',
+      questionId: 'question-1',
+      answerCount: 1,
+      correctCount: 0,
+      incorrectCount: 1,
+      consecutiveCorrectCount: 0,
+      latestIsCorrect: null,
+      lastAnsweredAt: DateTime.utc(2026, 7, 15),
+    );
+
+    expect(progress.status, QuestionProgressStatus.needsReview);
+    expect(
+      QuestionProgressFilter.unanswered.includes(progress.status),
+      isFalse,
+    );
+    expect(
+      QuestionProgressFilter.unmastered.includes(progress.status),
+      isTrue,
+    );
+  });
 }

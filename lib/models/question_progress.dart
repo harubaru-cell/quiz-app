@@ -4,6 +4,25 @@ enum QuestionProgressStatus {
   needsReview,
 }
 
+enum QuestionProgressFilter {
+  all,
+  unanswered,
+  incorrect,
+  unmastered;
+
+  bool includes(QuestionProgressStatus status) {
+    return switch (this) {
+      QuestionProgressFilter.all => true,
+      QuestionProgressFilter.unanswered =>
+        status == QuestionProgressStatus.unanswered,
+      QuestionProgressFilter.incorrect =>
+        status == QuestionProgressStatus.needsReview,
+      QuestionProgressFilter.unmastered =>
+        status != QuestionProgressStatus.correct,
+    };
+  }
+}
+
 class QuestionProgress {
   const QuestionProgress({
     required this.deckId,
@@ -42,11 +61,11 @@ class QuestionProgress {
   final DateTime? lastAnsweredAt;
 
   QuestionProgressStatus get status {
-    if (answerCount == 0 || latestIsCorrect == null) {
+    if (answerCount == 0) {
       return QuestionProgressStatus.unanswered;
     }
 
-    return latestIsCorrect!
+    return latestIsCorrect == true
         ? QuestionProgressStatus.correct
         : QuestionProgressStatus.needsReview;
   }
