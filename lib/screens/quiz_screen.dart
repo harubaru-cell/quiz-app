@@ -207,7 +207,7 @@ class _TextInputAnswerState extends State<_TextInputAnswer> {
   final TextEditingController _controller = TextEditingController();
 
   bool get _canSubmit {
-    return !widget.session.answered && _controller.text.trim().isNotEmpty;
+    return !widget.session.answered;
   }
 
   void _submit() {
@@ -296,7 +296,9 @@ class _AnswerPanel extends StatelessWidget {
             const SizedBox(height: 8),
             if (session.textAnswer != null) ...[
               Text(
-                'あなたの回答: ${session.textAnswer}',
+                session.textAnswer!.trim().isEmpty
+                    ? 'あなたの回答：未入力'
+                    : 'あなたの回答：${session.textAnswer}',
               ),
               const SizedBox(height: 4),
             ],
@@ -307,7 +309,7 @@ class _AnswerPanel extends StatelessWidget {
               )
             else if (item.question.answers.isNotEmpty)
               Text(
-                '正解: ${item.question.answers.first}',
+                '正解候補：${item.question.answers.join(' / ')}',
               ),
             if (item.question.explanation.isNotEmpty) ...[
               const SizedBox(height: 12),
