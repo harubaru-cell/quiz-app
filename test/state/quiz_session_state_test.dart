@@ -91,6 +91,7 @@ void main() {
   });
 
   test('保存コールバックが失敗しても保存中状態を解除する', () async {
+    var shouldFail = true;
     const question = QuizQuestion(
       id: 'choice-1',
       type: QuestionType.multipleChoice,
@@ -103,17 +104,56 @@ void main() {
     );
     final session = _createSession(
       question,
-      recorder: (_) => Future<void>.error(StateError('保存失敗')),
+      recorder: (_) {
+        if (shouldFail) {
+          return Future<void>.error(StateError('保存失敗'));
+        }
+        return Future<void>.value();
+      },
     );
 
-    await expectLater(
-      session.answer(1),
-      throwsA(isA<StateError>()),
-    );
+    await session.answer(1);
 
     expect(session.isSavingProgress, isFalse);
+    expect(session.answered, isFalse);
+    expect(session.answeredCount, 0);
+    expect(session.saveError, contains('もう一度回答してください'));
+
+    shouldFail = false;
+    await session.answer(1);
+
     expect(session.answered, isTrue);
     expect(session.answeredCount, 1);
+    expect(session.saveError, isNull);
+  });
+
+  test('同じセッションの履歴IDを固定し結果保存の開始を一度だけ許可する', () {
+    const question = QuizQuestion(
+      id: 'choice-1',
+      type: QuestionType.multipleChoice,
+      question: '問題',
+      choices: <String>['選択肢1', '選択肢2', '選択肢3', '選択肢4'],
+      answer: 1,
+      explanation: '',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    final session = _createSession(
+      question,
+      recorder: (_) => Future<void>.value(),
+    );
+
+    final firstHistory = session.finish(completed: true);
+    final secondHistory = session.finish(completed: true);
+
+    expect(firstHistory.id, secondHistory.id);
+    expect(session.beginFinalization(), isTrue);
+    expect(session.beginFinalization(), isFalse);
+    expect(session.isFinalizing, isTrue);
+
+    session.endFinalization();
+
+    expect(session.isFinalizing, isFalse);
   });
 }
 

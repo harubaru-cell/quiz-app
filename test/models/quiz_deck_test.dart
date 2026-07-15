@@ -40,4 +40,35 @@ void main() {
     expect(deck.hasDuplicateQuestionIds, isTrue);
     expect(deck.duplicateQuestionIds, <String>{'question-1'});
   });
+
+  test('同じ問題IDでも内容が変わるとデッキ署名が変わる', () {
+    final original = _deckWithQuestionText('最初の問題文');
+    final sameContent = QuizDeck.fromJson(original.toJson());
+    final updated = _deckWithQuestionText('更新後の問題文');
+
+    expect(sameContent.contentSignature, original.contentSignature);
+    expect(updated.contentSignature, isNot(original.contentSignature));
+  });
+}
+
+QuizDeck _deckWithQuestionText(String questionText) {
+  return QuizDeck(
+    id: 'deck-1',
+    subject: 'テスト',
+    title: 'テストデッキ',
+    version: '1.4',
+    questions: <QuizQuestion>[
+      QuizQuestion(
+        id: 'question-1',
+        type: QuestionType.textInput,
+        question: questionText,
+        answers: const <String>['正解'],
+        explanation: '',
+        tags: const <String>[],
+        difficulty: Difficulty.normal,
+      ),
+    ],
+    createdAt: DateTime.utc(2026, 7, 15),
+    updatedAt: DateTime.utc(2026, 7, 15),
+  );
 }

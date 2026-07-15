@@ -15,16 +15,17 @@ class QuizSessionState extends ChangeNotifier {
     QuestionResultRecorder? questionResultRecorder,
     QuizEngine? quizEngine,
     Uuid? uuid,
+    String? historyId,
   })  : _questions = questions,
         _questionResultRecorder = questionResultRecorder,
         _quizEngine = quizEngine ?? QuizEngine(),
-        _uuid = uuid ?? const Uuid();
+        _historyId = historyId ?? (uuid ?? const Uuid()).v4();
 
   final QuizDeck deck;
   final List<QuizSessionQuestion> _questions;
   final QuestionResultRecorder? _questionResultRecorder;
   final QuizEngine _quizEngine;
-  final Uuid _uuid;
+  final String _historyId;
 
   final List<QuestionResult> _results = <QuestionResult>[];
 
@@ -33,6 +34,8 @@ class QuizSessionState extends ChangeNotifier {
   String? _textAnswer;
   bool _answered = false;
   bool _isSavingProgress = false;
+  bool _isFinalizing = false;
+  String? _saveError;
 
   List<QuizSessionQuestion> get questions => List.unmodifiable(_questions);
 
@@ -42,6 +45,8 @@ class QuizSessionState extends ChangeNotifier {
   String? get textAnswer => _textAnswer;
   bool get answered => _answered;
   bool get isSavingProgress => _isSavingProgress;
+  bool get isFinalizing => _isFinalizing;
+  String? get saveError => _saveError;
   bool get hasQuestions => _questions.isNotEmpty;
 
   bool get isLastQuestion => _currentIndex >= _questions.length - 1;
@@ -65,7 +70,7 @@ class QuizSessionState extends ChangeNotifier {
   }
 
   Future<void> answer(int selectedIndex) async {
-    if (_answered) {
+    if (_answered || _isFinalizing) {
       return;
     }
 
@@ -77,6 +82,7 @@ class QuizSessionState extends ChangeNotifier {
 
     final isCorrect = _quizEngine.isCorrect(question, selectedIndex);
 
+    _saveError = null;
     _selectedIndex = selectedIndex;
     _answered = true;
 
@@ -92,7 +98,7 @@ class QuizSessionState extends ChangeNotifier {
   }
 
   Future<void> answerText(String enteredAnswer) async {
-    if (_answered) {
+    if (_answered || _isFinalizing) {
       return;
     }
 
@@ -104,6 +110,7 @@ class QuizSessionState extends ChangeNotifier {
 
     final isCorrect = _quizEngine.isTextCorrect(question, enteredAnswer);
 
+    _saveError = null;
     _textAnswer = enteredAnswer;
     _answered = true;
 
@@ -133,6 +140,12 @@ class QuizSessionState extends ChangeNotifier {
 
     try {
       await recorder(result);
+    } catch (_) {
+      _results.removeLast();
+      _selectedIndex = null;
+      _textAnswer = null;
+      _answered = false;
+      _saveError = '回答を保存できませんでした。もう一度回答してください。';
     } finally {
       _isSavingProgress = false;
       notifyListeners();
@@ -140,7 +153,7 @@ class QuizSessionState extends ChangeNotifier {
   }
 
   bool moveNext() {
-    if (!_answered || _isSavingProgress) {
+    if (!_answered || _isSavingProgress || _isFinalizing) {
       return false;
     }
 
@@ -149,6 +162,7 @@ class QuizSessionState extends ChangeNotifier {
       _selectedIndex = null;
       _textAnswer = null;
       _answered = false;
+      _saveError = null;
       notifyListeners();
       return true;
     }
@@ -156,9 +170,28 @@ class QuizSessionState extends ChangeNotifier {
     return false;
   }
 
+  bool beginFinalization() {
+    if (_isSavingProgress || _isFinalizing) {
+      return false;
+    }
+
+    _isFinalizing = true;
+    notifyListeners();
+    return true;
+  }
+
+  void endFinalization() {
+    if (!_isFinalizing) {
+      return;
+    }
+
+    _isFinalizing = false;
+    notifyListeners();
+  }
+
   QuizHistory finish({required bool completed}) {
     return QuizHistory(
-      id: _uuid.v4(),
+      id: _historyId,
       deckId: deck.id,
       playedAt: DateTime.now(),
       totalAnswered: _results.length,

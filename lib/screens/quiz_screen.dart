@@ -28,100 +28,119 @@ class QuizScreen extends StatelessWidget {
         final item = session.currentQuestion;
         final question = item.question;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              '${session.currentIndex + 1} / ${session.totalCount}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: session.isSavingProgress
-                    ? null
-                    : () => _finishEarly(context, session),
-                child: const Text('途中終了'),
+        return PopScope<void>(
+          canPop: !session.isSavingProgress && !session.isFinalizing,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                '${session.currentIndex + 1} / ${session.totalCount}',
               ),
-            ],
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              Text(
-                question.question,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(height: 1.45),
-              ),
-
-              if (question.audio != null) ...[
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: QuestionAudioButton(
-                    audioPath: question.audio!,
-                  ),
+              actions: [
+                TextButton(
+                  onPressed: session.isSavingProgress || session.isFinalizing
+                      ? null
+                      : () => _finishEarly(context, session),
+                  child: const Text('途中終了'),
                 ),
               ],
+            ),
+            body: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                Text(
+                  question.question,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(height: 1.45),
+                ),
 
-              const SizedBox(height: 20),
-
-              // 4択問題
-              if (question.type == QuestionType.multipleChoice)
-                for (var index = 0;
-                    index < item.displayChoices.length;
-                    index++) ...[
-                  ChoiceButton(
-                    index: index,
-                    label: item.displayChoices[index],
-                    isAnswered: session.answered,
-                    isSelected: session.selectedIndex == index,
-                    isCorrect: item.correctIndex == index,
-                    onPressed: () async {
-                      await session.answer(index);
-                    },
+                if (question.audio != null) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: QuestionAudioButton(
+                      audioPath: question.audio!,
+                    ),
                   ),
-                  const SizedBox(height: 10),
                 ],
 
-              // 記述式問題
-              if (question.type == QuestionType.textInput)
-                _TextInputAnswer(
-                  key: ValueKey(question.id),
-                  session: session,
-                ),
+                const SizedBox(height: 20),
 
-              if (session.answered) ...[
-                const SizedBox(height: 16),
-                _AnswerPanel(session: session),
-              ],
-            ],
-          ),
-          bottomNavigationBar: session.answered
-              ? BottomActionArea(
-                  child: FilledButton.icon(
-                    onPressed: session.isSavingProgress
-                        ? null
-                        : () => _nextOrFinish(
-                              context,
-                              session,
-                            ),
-                    icon: Icon(
-                      session.isSavingProgress
-                          ? Icons.sync
-                          : session.isLastQuestion
-                              ? Icons.flag
-                              : Icons.navigate_next,
+                // 4択問題
+                if (question.type == QuestionType.multipleChoice)
+                  for (var index = 0;
+                      index < item.displayChoices.length;
+                      index++) ...[
+                    ChoiceButton(
+                      index: index,
+                      label: item.displayChoices[index],
+                      isAnswered: session.answered,
+                      isSelected: session.selectedIndex == index,
+                      isCorrect: item.correctIndex == index,
+                      onPressed: session.isFinalizing
+                          ? null
+                          : () async {
+                              await session.answer(index);
+                            },
                     ),
-                    label: Text(
-                      session.isSavingProgress
-                          ? '進捗を保存中'
-                          : session.isLastQuestion
-                              ? '結果を見る'
-                              : '次へ',
+                    const SizedBox(height: 10),
+                  ],
+
+                // 記述式問題
+                if (question.type == QuestionType.textInput)
+                  _TextInputAnswer(
+                    key: ValueKey(question.id),
+                    session: session,
+                  ),
+
+                if (session.saveError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    session.saveError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                )
-              : null,
+                ],
+
+                if (session.answered) ...[
+                  const SizedBox(height: 16),
+                  _AnswerPanel(session: session),
+                ],
+              ],
+            ),
+            bottomNavigationBar: session.answered
+                ? BottomActionArea(
+                    child: FilledButton.icon(
+                      onPressed:
+                          session.isSavingProgress || session.isFinalizing
+                              ? null
+                              : () => _nextOrFinish(
+                                    context,
+                                    session,
+                                  ),
+                      icon: Icon(
+                        session.isSavingProgress || session.isFinalizing
+                            ? Icons.sync
+                            : session.isLastQuestion
+                                ? Icons.flag
+                                : Icons.navigate_next,
+                      ),
+                      label: Text(
+                        session.isSavingProgress
+                            ? '進捗を保存中'
+                            : session.isFinalizing
+                                ? '結果を保存中'
+                                : session.isLastQuestion
+                                    ? '結果を見る'
+                                    : '次へ',
+                      ),
+                    ),
+                  )
+                : null,
+          ),
         );
       },
     );
@@ -131,7 +150,7 @@ class QuizScreen extends StatelessWidget {
     BuildContext context,
     QuizSessionState session,
   ) async {
-    if (!session.answered || session.isSavingProgress) {
+    if (!session.answered || session.isSavingProgress || session.isFinalizing) {
       return;
     }
 
@@ -139,29 +158,45 @@ class QuizScreen extends StatelessWidget {
       return;
     }
 
-    final history = session.finish(completed: true);
-
-    await context.read<AppState>().recordHistory(history);
-
-    if (!context.mounted) {
+    if (!session.beginFinalization()) {
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => ResultScreen(
-          deck: session.deck,
-          history: history,
+    final history = session.finish(completed: true);
+
+    try {
+      await context.read<AppState>().recordHistory(history);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ResultScreen(
+            deck: session.deck,
+            history: history,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      session.endFinalization();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('結果を保存できませんでした。もう一度お試しください。'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _finishEarly(
     BuildContext context,
     QuizSessionState session,
   ) async {
-    if (session.isSavingProgress) {
+    if (session.isSavingProgress || session.isFinalizing) {
       return;
     }
 
@@ -194,22 +229,38 @@ class QuizScreen extends StatelessWidget {
       return;
     }
 
-    final history = session.finish(completed: false);
-
-    await context.read<AppState>().recordHistory(history);
-
-    if (!context.mounted) {
+    if (!session.beginFinalization()) {
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => ResultScreen(
-          deck: session.deck,
-          history: history,
+    final history = session.finish(completed: false);
+
+    try {
+      await context.read<AppState>().recordHistory(history);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ResultScreen(
+            deck: session.deck,
+            history: history,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      session.endFinalization();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('結果を保存できませんでした。もう一度お試しください。'),
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -229,7 +280,9 @@ class _TextInputAnswerState extends State<_TextInputAnswer> {
   final TextEditingController _controller = TextEditingController();
 
   bool get _canSubmit {
-    return !widget.session.answered;
+    return !widget.session.answered &&
+        !widget.session.isSavingProgress &&
+        !widget.session.isFinalizing;
   }
 
   Future<void> _submit() async {
@@ -255,7 +308,7 @@ class _TextInputAnswerState extends State<_TextInputAnswer> {
       children: [
         TextField(
           controller: _controller,
-          enabled: !widget.session.answered,
+          enabled: _canSubmit,
           textInputAction: TextInputAction.done,
           decoration: const InputDecoration(
             labelText: '回答',

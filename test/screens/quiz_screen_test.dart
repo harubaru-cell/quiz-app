@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:personal_quiz_study/models/quiz_deck.dart';
+import 'package:personal_quiz_study/models/quiz_history.dart';
 import 'package:personal_quiz_study/models/quiz_question.dart';
 import 'package:personal_quiz_study/models/quiz_session.dart';
 import 'package:personal_quiz_study/screens/quiz_screen.dart';
+import 'package:personal_quiz_study/screens/result_screen.dart';
+import 'package:personal_quiz_study/state/app_state.dart';
 import 'package:personal_quiz_study/state/quiz_session_state.dart';
 
 void main() {
@@ -98,11 +101,85 @@ void main() {
 
     expect(nextButton.onPressed, isNull);
     expect(finishButton.onPressed, isNull);
+    expect(
+      tester.widget<PopScope<void>>(find.byType(PopScope<void>)).canPop,
+      isFalse,
+    );
 
     saveCompleter.complete();
     await tester.pumpAndSettle();
 
     expect(find.text('結果を見る'), findsOneWidget);
+    expect(
+      tester.widget<PopScope<void>>(find.byType(PopScope<void>)).canPop,
+      isTrue,
+    );
+  });
+
+  testWidgets('回答位置を保存できない場合は再回答できる状態へ戻す', (tester) async {
+    const question = QuizQuestion(
+      id: 'choice-1',
+      type: QuestionType.multipleChoice,
+      question: '正しい選択肢を選んでください。',
+      choices: <String>['選択肢1', '選択肢2', '選択肢3', '選択肢4'],
+      answer: 1,
+      explanation: '',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    final session = _createSession(
+      question,
+      recorder: (_) => Future<void>.error(StateError('保存失敗')),
+    );
+
+    await tester.pumpWidget(_buildApp(session));
+    await tester.tap(find.text('2. 選択肢2'));
+    await tester.pumpAndSettle();
+
+    expect(session.isSavingProgress, isFalse);
+    expect(session.answered, isFalse);
+    expect(session.answeredCount, 0);
+    expect(
+      find.text('回答を保存できませんでした。もう一度回答してください。'),
+      findsOneWidget,
+    );
+    expect(find.text('結果を見る'), findsNothing);
+  });
+
+  testWidgets('結果保存中の連打と戻る操作を防ぎ履歴保存を一度だけ呼ぶ', (tester) async {
+    const question = QuizQuestion(
+      id: 'choice-1',
+      type: QuestionType.multipleChoice,
+      question: '正しい選択肢を選んでください。',
+      choices: <String>['選択肢1', '選択肢2', '選択肢3', '選択肢4'],
+      answer: 1,
+      explanation: '',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    final session = _createSession(question);
+    final appState = _DelayedHistoryAppState();
+
+    await tester.pumpWidget(_buildAppWithAppState(session, appState));
+    await tester.tap(find.text('2. 選択肢2'));
+    await tester.pump();
+
+    await tester.tap(find.text('結果を見る'));
+    await tester.tap(find.text('結果を見る'));
+    await tester.pump();
+
+    expect(appState.recordHistoryCallCount, 1);
+    expect(session.isFinalizing, isTrue);
+    expect(find.text('結果を保存中'), findsOneWidget);
+    expect(
+      tester.widget<PopScope<void>>(find.byType(PopScope<void>)).canPop,
+      isFalse,
+    );
+
+    appState.completeSave();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ResultScreen), findsOneWidget);
   });
 }
 
@@ -112,6 +189,16 @@ Widget _buildApp(QuizSessionState session) {
     child: const MaterialApp(
       home: QuizScreen(),
     ),
+  );
+}
+
+Widget _buildAppWithAppState(
+  QuizSessionState session,
+  AppState appState,
+) {
+  return ChangeNotifierProvider<AppState>.value(
+    value: appState,
+    child: _buildApp(session),
   );
 }
 
@@ -140,4 +227,20 @@ QuizSessionState _createSession(
     ],
     questionResultRecorder: recorder,
   );
+}
+
+class _DelayedHistoryAppState extends AppState {
+  final Completer<void> _saveCompleter = Completer<void>();
+
+  int recordHistoryCallCount = 0;
+
+  @override
+  Future<void> recordHistory(QuizHistory history) {
+    recordHistoryCallCount += 1;
+    return _saveCompleter.future;
+  }
+
+  void completeSave() {
+    _saveCompleter.complete();
+  }
 }

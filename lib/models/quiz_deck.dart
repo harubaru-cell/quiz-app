@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'quiz_question.dart';
 
 class QuizDeck {
@@ -33,6 +35,21 @@ class QuizDeck {
   }
 
   bool get hasDuplicateQuestionIds => duplicateQuestionIds.isNotEmpty;
+
+  String get contentSignature {
+    final bytes = utf8.encode(jsonEncode(toJson()));
+    const firstModulus = 1000000007;
+    const secondModulus = 1000000009;
+    var firstHash = 7;
+    var secondHash = 11;
+
+    for (final byte in bytes) {
+      firstHash = (firstHash * 257 + byte) % firstModulus;
+      secondHash = (secondHash * 263 + byte) % secondModulus;
+    }
+
+    return '${bytes.length}:$firstHash:$secondHash';
+  }
 
   factory QuizDeck.fromJson(Map<String, dynamic> json) {
     final questionsJson = json['questions'];

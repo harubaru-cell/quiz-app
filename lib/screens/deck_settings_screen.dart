@@ -5,6 +5,7 @@ import '../models/question_progress.dart';
 import '../models/quiz_deck.dart';
 import '../models/quiz_question.dart';
 import '../models/quiz_session.dart';
+import '../models/study_cycle.dart';
 import '../services/quiz_engine.dart';
 import '../state/app_state.dart';
 import '../state/quiz_session_state.dart';
@@ -40,15 +41,18 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
   QuestionCountOption _countOption = QuestionCountOption.ten;
   QuestionProgressFilter _progressFilter = QuestionProgressFilter.all;
   late bool _shuffle;
+  bool _isStartingStudy = false;
 
   late final List<String> _availableCategories;
   late final Set<String> _selectedCategories;
+  late final String _deckSignature;
 
   @override
   void initState() {
     super.initState();
 
     _shuffle = widget.initialShuffle;
+    _deckSignature = widget.deck.contentSignature;
     _availableCategories = _findAvailableCategories();
     _selectedCategories = _availableCategories.toSet();
   }
@@ -58,6 +62,12 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
     final appState = context.watch<AppState>();
     final baseQuestions = _baseTargetQuestions;
     final selectedQuestions = _selectedTargetQuestions(appState);
+    final studyCycle = widget.onlyQuestionIds == null
+        ? appState.studyCycleFor(widget.deck.id)
+        : null;
+    final canResumeStudyCycle = studyCycle != null &&
+        !studyCycle.isComplete &&
+        _isStudyCycleCompatible(studyCycle);
 
     final baseCount = baseQuestions.length;
     final selectedCount = selectedQuestions.length;
@@ -94,6 +104,17 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
               child: Chip(
                 label: Text('間違えた問題だけ'),
               ),
+            ),
+          ],
+          if (studyCycle != null) ...[
+            const SizedBox(height: 16),
+            _StudyCycleCard(
+              cycle: studyCycle,
+              isCompatible: _isStudyCycleCompatible(studyCycle),
+              isStarting: _isStartingStudy,
+              onContinue: canResumeStudyCycle
+                  ? () => _continueStudyCycle(studyCycle)
+                  : null,
             ),
           ],
           if (widget.onlyQuestionIds == null) ...[
@@ -260,10 +281,16 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
       ),
       bottomNavigationBar: BottomActionArea(
         child: FilledButton.icon(
-          onPressed: selectedCount == 0 ? null : _start,
-          icon: const Icon(Icons.play_arrow),
+          onPressed: selectedCount == 0 || _isStartingStudy
+              ? null
+              : () => _start(studyCycle),
+          icon: Icon(
+            _isStartingStudy ? Icons.sync : Icons.play_arrow,
+          ),
           label: Text(
-            selectedCount == 0 ? emptySelectionLabel : '開始',
+            selectedCount == 0
+                ? emptySelectionLabel
+                : _startButtonLabel(studyCycle),
           ),
         ),
       ),
@@ -363,10 +390,101 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
     });
   }
 
-  void _start() {
-    final appState = context.read<AppState>();
-    final selectedSource = _selectedTargetQuestions(appState);
+  Future<void> _start(StudyCycle? existingCycle) async {
+    if (_isStartingStudy) {
+      return;
+    }
 
+    setState(() {
+      _isStartingStudy = true;
+    });
+
+    var navigated = false;
+
+    try {
+      final appState = context.read<AppState>();
+      final selectedSource = _selectedTargetQuestions(appState);
+
+      if (!_usesStudyCycle) {
+        navigated = _openOneOffQuiz(appState, selectedSource);
+        return;
+      }
+
+      if (existingCycle != null && !existingCycle.isComplete) {
+        final shouldRestart = await _confirmStudyCycleRestart();
+
+        if (shouldRestart != true || !mounted) {
+          return;
+        }
+      }
+
+      final orderedQuestions = QuizEngine().buildQuestions(
+        source: selectedSource,
+        countOption: QuestionCountOption.all,
+        shuffle: _shuffle,
+      );
+
+      if (orderedQuestions.isEmpty) {
+        return;
+      }
+
+      final orderedQuestionIds = orderedQuestions
+          .map((item) => item.question.id)
+          .toList(growable: false);
+      final cycle = await appState.startStudyCycle(
+        deckId: widget.deck.id,
+        deckSignature: _deckSignature,
+        orderedQuestionIds: orderedQuestionIds,
+        batchSize: _countOption.limit ?? orderedQuestionIds.length,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      if (cycle == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('一周学習を開始できませんでした。もう一度お試しください。'),
+          ),
+        );
+        return;
+      }
+
+      navigated = _openStudyCycleQuiz(appState, cycle);
+    } finally {
+      if (mounted && !navigated) {
+        setState(() {
+          _isStartingStudy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _continueStudyCycle(StudyCycle cycle) async {
+    if (_isStartingStudy ||
+        cycle.isComplete ||
+        !_isStudyCycleCompatible(cycle)) {
+      return;
+    }
+
+    setState(() {
+      _isStartingStudy = true;
+    });
+
+    final appState = context.read<AppState>();
+    final navigated = _openStudyCycleQuiz(appState, cycle);
+
+    if (mounted && !navigated) {
+      setState(() {
+        _isStartingStudy = false;
+      });
+    }
+  }
+
+  bool _openOneOffQuiz(
+    AppState appState,
+    List<QuizQuestion> selectedSource,
+  ) {
     final questions = QuizEngine().buildQuestions(
       source: selectedSource,
       countOption: _countOption,
@@ -375,24 +493,127 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
     );
 
     if (questions.isEmpty) {
-      return;
+      return false;
     }
 
+    _navigateToQuiz(
+      questions: questions,
+      recorder: (result) => appState.recordQuestionResult(
+        widget.deck.id,
+        result,
+      ),
+    );
+    return true;
+  }
+
+  bool _openStudyCycleQuiz(
+    AppState appState,
+    StudyCycle cycle,
+  ) {
+    final questionsById = <String, QuizQuestion>{
+      for (final question in widget.deck.questions) question.id: question,
+    };
+    final source = <QuizQuestion>[];
+
+    for (final questionId in cycle.nextBatchQuestionIds) {
+      final question = questionsById[questionId];
+
+      if (question == null) {
+        return false;
+      }
+
+      source.add(question);
+    }
+
+    final questions = QuizEngine().buildQuestions(
+      source: source,
+      countOption: QuestionCountOption.all,
+      shuffle: false,
+    );
+
+    if (questions.isEmpty) {
+      return false;
+    }
+
+    _navigateToQuiz(
+      questions: questions,
+      recorder: (result) => appState.recordStudyCycleQuestionResult(
+        deckId: widget.deck.id,
+        cycleId: cycle.cycleId,
+        result: result,
+      ),
+    );
+    return true;
+  }
+
+  void _navigateToQuiz({
+    required List<QuizSessionQuestion> questions,
+    required QuestionResultRecorder recorder,
+  }) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => ChangeNotifierProvider(
           create: (_) => QuizSessionState(
             deck: widget.deck,
             questions: questions,
-            questionResultRecorder: (result) => appState.recordQuestionResult(
-              widget.deck.id,
-              result,
-            ),
+            questionResultRecorder: recorder,
           ),
           child: const QuizScreen(),
         ),
       ),
     );
+  }
+
+  Future<bool?> _confirmStudyCycleRestart() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('新しい一周を始めますか？'),
+        content: const Text(
+          '現在の一周の位置はリセットされます。問題別の回答履歴と進捗は残ります。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('新しい一周を開始'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _usesStudyCycle {
+    return widget.onlyQuestionIds == null &&
+        !widget.deck.hasDuplicateQuestionIds;
+  }
+
+  bool _isStudyCycleCompatible(StudyCycle cycle) {
+    if (widget.deck.hasDuplicateQuestionIds || cycle.deckId != widget.deck.id) {
+      return false;
+    }
+    if (cycle.deckSignature != _deckSignature) {
+      return false;
+    }
+
+    final currentQuestionIds =
+        widget.deck.questions.map((question) => question.id).toSet();
+
+    return cycle.orderedQuestionIds.every(currentQuestionIds.contains);
+  }
+
+  String _startButtonLabel(StudyCycle? cycle) {
+    if (_isStartingStudy) {
+      return '準備中';
+    }
+    if (!_usesStudyCycle) {
+      return '開始';
+    }
+
+    return cycle == null ? '一周学習を開始' : '新しい一周を開始';
   }
 
   String _progressFilterLabel(QuestionProgressFilter filter) {
@@ -411,5 +632,87 @@ class _DeckSettingsScreenState extends State<DeckSettingsScreen> {
       QuestionProgressFilter.incorrect => '最新の回答が不正解の問題を対象にします。',
       QuestionProgressFilter.unmastered => '未回答、または最新の回答が不正解の問題を対象にします。',
     };
+  }
+}
+
+class _StudyCycleCard extends StatelessWidget {
+  const _StudyCycleCard({
+    required this.cycle,
+    required this.isCompatible,
+    required this.isStarting,
+    required this.onContinue,
+  });
+
+  final StudyCycle cycle;
+  final bool isCompatible;
+  final bool isStarting;
+  final VoidCallback? onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final completedCount = cycle.completedCount;
+    final totalCount = cycle.orderedQuestionIds.length;
+
+    return Card(
+      key: const ValueKey('study-cycle-card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  cycle.isComplete
+                      ? Icons.check_circle_outline
+                      : Icons.route_outlined,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    cycle.isComplete ? '一周完了' : '一周学習の続き',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('$completedCount / $totalCount問 完了'),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: totalCount == 0 ? 0 : completedCount / totalCount,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              cycle.isComplete
+                  ? '全問題に一度回答しました。新しい一周は下のボタンから開始できます。'
+                  : '残り${cycle.remainingCount}問。次は最大${cycle.batchSize}問の区切りを進めます。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (!cycle.isComplete && !isCompatible) ...[
+              const SizedBox(height: 8),
+              Text(
+                'デッキ内容が変更されているため、この一周は再開できません。新しい一周を開始してください。',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+            if (!cycle.isComplete && isCompatible) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                key: const ValueKey('continue-study-cycle'),
+                onPressed: isStarting ? null : onContinue,
+                icon: const Icon(Icons.play_arrow),
+                label: Text(
+                  '続きから学習（${cycle.nextBatchQuestionIds.length}問）',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

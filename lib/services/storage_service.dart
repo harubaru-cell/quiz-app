@@ -5,6 +5,7 @@ class StorageService {
   static const historiesKey = 'quiz_app.histories';
   static const deckStatsKey = 'quiz_app.deck_stats';
   static const questionProgressKey = 'quiz_app.question_progress';
+  static const studyCyclesKey = 'quiz_app.study_cycles';
 
   Future<String?> readString(String key) async {
     final preferences = await SharedPreferences.getInstance();
@@ -13,7 +14,11 @@ class StorageService {
 
   Future<void> writeString(String key, String value) async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(key, value);
+    final didSave = await preferences.setString(key, value);
+
+    if (!didSave) {
+      throw StateError('保存に失敗しました: $key');
+    }
   }
 
   Future<void> remove(String key) async {
