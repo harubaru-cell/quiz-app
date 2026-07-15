@@ -4,10 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/deck_stats.dart';
+import '../models/question_progress.dart';
 import '../models/quiz_deck.dart';
 import '../models/quiz_history.dart';
 import '../repositories/deck_repository.dart';
 import '../repositories/history_repository.dart';
+import '../repositories/question_progress_repository.dart';
 import '../services/audio_storage_service.dart';
 import '../services/json_import_service.dart';
 import '../services/storage_service.dart';
@@ -23,6 +25,7 @@ class AppState extends ChangeNotifier {
         _zipImportService = zipImportService ?? ZipImportService() {
     _deckRepository = DeckRepository(_storageService);
     _historyRepository = HistoryRepository(_storageService);
+    _questionProgressRepository = QuestionProgressRepository(_storageService);
   }
 
   final StorageService _storageService;
@@ -31,10 +34,13 @@ class AppState extends ChangeNotifier {
 
   late final DeckRepository _deckRepository;
   late final HistoryRepository _historyRepository;
+  late final QuestionProgressRepository _questionProgressRepository;
 
   List<QuizDeck> _decks = <QuizDeck>[];
   List<QuizHistory> _histories = <QuizHistory>[];
   Map<String, DeckStats> _stats = <String, DeckStats>{};
+  Map<String, Map<String, QuestionProgress>> _questionProgress =
+      <String, Map<String, QuestionProgress>>{};
 
   bool _isLoading = false;
   String? _message;
@@ -47,6 +53,23 @@ class AppState extends ChangeNotifier {
     return _stats[deckId] ?? DeckStats.empty(deckId);
   }
 
+  QuestionProgress questionProgressFor(
+    String deckId,
+    String questionId,
+  ) {
+    return _questionProgress[deckId]?[questionId] ??
+        QuestionProgress.unanswered(
+          deckId: deckId,
+          questionId: questionId,
+        );
+  }
+
+  List<QuestionProgress> questionProgressForDeck(String deckId) {
+    return List<QuestionProgress>.unmodifiable(
+      _questionProgress[deckId]?.values ?? const <QuestionProgress>[],
+    );
+  }
+
   Future<void> load() async {
     _isLoading = true;
     notifyListeners();
@@ -55,6 +78,17 @@ class AppState extends ChangeNotifier {
       _decks = await _deckRepository.loadDecks();
       _histories = await _historyRepository.loadHistories();
       _stats = await _historyRepository.loadStats();
+
+      var progressSnapshot = await _questionProgressRepository.loadProgress();
+
+      if (progressSnapshot == null) {
+        progressSnapshot = _questionProgressRepository.migrateFromHistories(
+          _histories,
+        );
+        await _questionProgressRepository.saveProgress(progressSnapshot);
+      }
+
+      _replaceQuestionProgress(progressSnapshot.items);
       _message = null;
     } catch (error) {
       _message = '保存データの読み込みに失敗しました: $error';
@@ -62,6 +96,21 @@ class AppState extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _replaceQuestionProgress(List<QuestionProgress> progressItems) {
+    final progressByDeck = <String, Map<String, QuestionProgress>>{};
+
+    for (final progress in progressItems) {
+      progressByDeck
+          .putIfAbsent(
+            progress.deckId,
+            () => <String, QuestionProgress>{},
+          )
+          .putIfAbsent(progress.questionId, () => progress);
+    }
+
+    _questionProgress = progressByDeck;
   }
 
   Future<void> importDeckFromFile() async {

@@ -4,6 +4,7 @@ class StorageService {
   static const decksKey = 'quiz_app.decks';
   static const historiesKey = 'quiz_app.histories';
   static const deckStatsKey = 'quiz_app.deck_stats';
+  static const questionProgressKey = 'quiz_app.question_progress';
 
   Future<String?> readString(String key) async {
     final preferences = await SharedPreferences.getInstance();

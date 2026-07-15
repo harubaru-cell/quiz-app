@@ -19,6 +19,21 @@ class QuizDeck {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  Set<String> get duplicateQuestionIds {
+    final seen = <String>{};
+    final duplicates = <String>{};
+
+    for (final question in questions) {
+      if (!seen.add(question.id)) {
+        duplicates.add(question.id);
+      }
+    }
+
+    return Set<String>.unmodifiable(duplicates);
+  }
+
+  bool get hasDuplicateQuestionIds => duplicateQuestionIds.isNotEmpty;
+
   factory QuizDeck.fromJson(Map<String, dynamic> json) {
     final questionsJson = json['questions'];
     if (json['subject'] is! String) {
