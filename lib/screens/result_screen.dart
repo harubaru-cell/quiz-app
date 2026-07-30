@@ -5,6 +5,7 @@ import '../models/quiz_history.dart';
 import '../models/quiz_question.dart';
 import '../utils/date_format.dart';
 import '../widgets/bottom_action_area.dart';
+import '../widgets/decorated_study_text.dart';
 import 'deck_settings_screen.dart';
 
 class ResultScreen extends StatelessWidget {
@@ -199,9 +200,8 @@ class _ResultDetailSection extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 6),
-        Text(
-          content,
-          softWrap: true,
+        DecoratedStudyText(
+          text: content,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 height: 1.55,
               ),
