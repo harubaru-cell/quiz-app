@@ -387,15 +387,37 @@ void main() {
     await tester.pumpWidget(_buildAppWithAppState(session, appState));
     await tester.tap(find.text('答えを見る'));
     await tester.pump();
-    await tester.tap(find.text('あやしい'));
+
+    final unsureButton = find.text('あやしい');
+    await tester.ensureVisible(unsureButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('結果を見る'));
+    await tester.tap(unsureButton);
+    await tester.pumpAndSettle();
+
+    final resultButton = find.text('結果を見る');
+    expect(resultButton, findsOneWidget);
+    await tester.ensureVisible(resultButton);
+    await tester.pumpAndSettle();
+    await tester.tap(resultButton);
     await tester.pumpAndSettle();
 
     expect(find.byType(ResultScreen), findsOneWidget);
     expect(find.text('不正解数'), findsOneWidget);
     expect(find.text('1問'), findsNWidgets(2));
-    expect(find.text('自己評価：あやしい'), findsOneWidget);
+
+    final ratingLabel = find.text('自己評価：あやしい');
+    final resultScrollable = find.descendant(
+      of: find.byType(ResultScreen),
+      matching: find.byType(Scrollable),
+    );
+    expect(resultScrollable, findsOneWidget);
+    await tester.scrollUntilVisible(
+      ratingLabel,
+      200,
+      scrollable: resultScrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(ratingLabel, findsOneWidget);
 
     await tester.tap(find.text('間違えた問題だけ挑戦'));
     await tester.pumpAndSettle();
