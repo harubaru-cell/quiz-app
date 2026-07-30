@@ -1,3 +1,22 @@
+enum FlashcardRating {
+  remembered('remembered'),
+  unsure('unsure'),
+  forgotten('forgotten');
+
+  const FlashcardRating(this.value);
+
+  final String value;
+
+  static FlashcardRating fromJson(String value) {
+    return FlashcardRating.values.firstWhere(
+      (rating) => rating.value == value,
+      orElse: () => throw FormatException(
+        '未対応のフラッシュカード自己評価です: $value',
+      ),
+    );
+  }
+}
+
 class QuizHistory {
   const QuizHistory({
     required this.id,
@@ -56,6 +75,7 @@ class QuestionResult {
     this.correctAnswer,
     this.textAnswer,
     this.correctTextAnswer,
+    this.flashcardRating,
     required this.isCorrect,
     required this.answeredAt,
   });
@@ -70,16 +90,24 @@ class QuestionResult {
   final String? textAnswer;
   final String? correctTextAnswer;
 
+  // フラッシュカード問題で使用
+  final FlashcardRating? flashcardRating;
+
   final bool isCorrect;
   final DateTime answeredAt;
 
   factory QuestionResult.fromJson(Map<String, dynamic> json) {
+    final rawFlashcardRating = json['flashcardRating'];
+
     return QuestionResult(
       questionId: json['questionId'] as String,
       selectedAnswer: json['selectedAnswer'] as int?,
       correctAnswer: json['correctAnswer'] as int?,
       textAnswer: json['textAnswer'] as String?,
       correctTextAnswer: json['correctTextAnswer'] as String?,
+      flashcardRating: rawFlashcardRating is String
+          ? FlashcardRating.fromJson(rawFlashcardRating)
+          : null,
       isCorrect: json['isCorrect'] as bool,
       answeredAt: DateTime.parse(json['answeredAt'] as String),
     );
@@ -92,6 +120,7 @@ class QuestionResult {
       if (correctAnswer != null) 'correctAnswer': correctAnswer,
       if (textAnswer != null) 'textAnswer': textAnswer,
       if (correctTextAnswer != null) 'correctTextAnswer': correctTextAnswer,
+      if (flashcardRating != null) 'flashcardRating': flashcardRating!.value,
       'isCorrect': isCorrect,
       'answeredAt': answeredAt.toIso8601String(),
     };

@@ -16,7 +16,8 @@ class HistoryRepository {
     }
     final decoded = jsonDecode(raw) as List;
     return decoded
-        .map((item) => QuizHistory.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map((item) =>
+            QuizHistory.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
   }
 
@@ -34,7 +35,8 @@ class HistoryRepository {
     }
     final decoded = jsonDecode(raw) as List;
     final stats = decoded
-        .map((item) => DeckStats.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map((item) =>
+            DeckStats.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
     return {for (final item in stats) item.deckId: item};
   }

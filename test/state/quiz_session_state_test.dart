@@ -155,6 +155,91 @@ void main() {
 
     expect(session.isFinalizing, isFalse);
   });
+
+  test('flashcardは答えを見るだけでは回答せず、3段階評価を正誤へ変換する', () async {
+    const expectations = <FlashcardRating, bool>{
+      FlashcardRating.remembered: true,
+      FlashcardRating.unsure: false,
+      FlashcardRating.forgotten: false,
+    };
+
+    for (final entry in expectations.entries) {
+      QuestionResult? recordedResult;
+      final session = _createSession(
+        _flashcard('flashcard-${entry.key.value}'),
+        recorder: (result) {
+          recordedResult = result;
+          return Future<void>.value();
+        },
+      );
+
+      await session.answerFlashcard(entry.key);
+
+      expect(session.answeredCount, 0);
+      expect(session.answered, isFalse);
+
+      session.revealFlashcardAnswer();
+
+      expect(session.flashcardAnswerRevealed, isTrue);
+      expect(session.answeredCount, 0);
+
+      await session.answerFlashcard(entry.key);
+
+      expect(session.answeredCount, 1);
+      expect(session.flashcardRating, entry.key);
+      expect(recordedResult?.flashcardRating, entry.key);
+      expect(recordedResult?.isCorrect, entry.value);
+    }
+  });
+
+  test('flashcardの自己評価を連打しても保存と履歴追加を一度だけ行う', () async {
+    final saveCompleter = Completer<void>();
+    var saveCount = 0;
+    final session = _createSession(
+      _flashcard('flashcard-1'),
+      recorder: (_) {
+        saveCount += 1;
+        return saveCompleter.future;
+      },
+    );
+
+    session.revealFlashcardAnswer();
+    final firstAnswer = session.answerFlashcard(FlashcardRating.unsure);
+    final secondAnswer = session.answerFlashcard(FlashcardRating.forgotten);
+
+    await secondAnswer;
+
+    expect(saveCount, 1);
+    expect(session.answeredCount, 1);
+    expect(session.flashcardRating, FlashcardRating.unsure);
+    expect(session.isSavingProgress, isTrue);
+    expect(session.moveNext(), isFalse);
+
+    saveCompleter.complete();
+    await firstAnswer;
+
+    expect(session.isSavingProgress, isFalse);
+    expect(session.results.single.flashcardRating, FlashcardRating.unsure);
+  });
+
+  test('次のflashcardへ進むと答えと自己評価を非表示状態へ戻す', () async {
+    final session = _createSession(
+      _flashcard('flashcard-1'),
+      additionalQuestions: <QuizQuestion>[
+        _flashcard('flashcard-2'),
+      ],
+      recorder: (_) => Future<void>.value(),
+    );
+
+    session.revealFlashcardAnswer();
+    await session.answerFlashcard(FlashcardRating.remembered);
+
+    expect(session.moveNext(), isTrue);
+    expect(session.currentQuestion.question.id, 'flashcard-2');
+    expect(session.flashcardAnswerRevealed, isFalse);
+    expect(session.flashcardRating, isNull);
+    expect(session.answered, isFalse);
+  });
 }
 
 QuizSessionState _createSession(
@@ -185,5 +270,17 @@ QuizSessionState _createSession(
         )
         .toList(),
     questionResultRecorder: recorder,
+  );
+}
+
+QuizQuestion _flashcard(String id) {
+  return QuizQuestion(
+    id: id,
+    type: QuestionType.flashcard,
+    question: '$id の事案概要',
+    answers: const <String>['模範解答'],
+    explanation: '架空事件',
+    tags: const <String>['労働法', '判例'],
+    difficulty: Difficulty.hard,
   );
 }

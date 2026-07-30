@@ -111,6 +111,59 @@ void main() {
     );
   });
 
+  test('flashcardの3段階評価を回答直後に正解または要復習として永続化する', () async {
+    final appState = AppState();
+
+    await appState.load();
+    await appState.recordQuestionResult(
+      'labor-law',
+      QuestionResult(
+        questionId: 'remembered',
+        flashcardRating: FlashcardRating.remembered,
+        isCorrect: true,
+        answeredAt: DateTime.utc(2026, 7, 30, 10),
+      ),
+    );
+    await appState.recordQuestionResult(
+      'labor-law',
+      QuestionResult(
+        questionId: 'unsure',
+        flashcardRating: FlashcardRating.unsure,
+        isCorrect: false,
+        answeredAt: DateTime.utc(2026, 7, 30, 10, 1),
+      ),
+    );
+    await appState.recordQuestionResult(
+      'labor-law',
+      QuestionResult(
+        questionId: 'forgotten',
+        flashcardRating: FlashcardRating.forgotten,
+        isCorrect: false,
+        answeredAt: DateTime.utc(2026, 7, 30, 10, 2),
+      ),
+    );
+
+    final reloaded = AppState();
+    await reloaded.load();
+
+    expect(
+      reloaded.questionProgressFor('labor-law', 'remembered').status,
+      QuestionProgressStatus.correct,
+    );
+    expect(
+      reloaded.questionProgressFor('labor-law', 'unsure').status,
+      QuestionProgressStatus.needsReview,
+    );
+    expect(
+      reloaded.questionProgressFor('labor-law', 'forgotten').status,
+      QuestionProgressStatus.needsReview,
+    );
+    expect(
+      reloaded.questionProgressFor('labor-law', 'never-rated').status,
+      QuestionProgressStatus.unanswered,
+    );
+  });
+
   test('問題別進捗の保存に失敗しても呼び出しを完了する', () async {
     final storageService = _FailingStorageService();
     final appState = AppState(storageService: storageService);

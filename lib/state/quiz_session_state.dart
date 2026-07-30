@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/quiz_deck.dart';
 import '../models/quiz_history.dart';
+import '../models/quiz_question.dart';
 import '../models/quiz_session.dart';
 import '../services/quiz_engine.dart';
 
@@ -32,6 +33,8 @@ class QuizSessionState extends ChangeNotifier {
   int _currentIndex = 0;
   int? _selectedIndex;
   String? _textAnswer;
+  FlashcardRating? _flashcardRating;
+  bool _flashcardAnswerRevealed = false;
   bool _answered = false;
   bool _isSavingProgress = false;
   bool _isFinalizing = false;
@@ -43,6 +46,8 @@ class QuizSessionState extends ChangeNotifier {
   int get totalCount => _questions.length;
   int? get selectedIndex => _selectedIndex;
   String? get textAnswer => _textAnswer;
+  FlashcardRating? get flashcardRating => _flashcardRating;
+  bool get flashcardAnswerRevealed => _flashcardAnswerRevealed;
   bool get answered => _answered;
   bool get isSavingProgress => _isSavingProgress;
   bool get isFinalizing => _isFinalizing;
@@ -76,7 +81,8 @@ class QuizSessionState extends ChangeNotifier {
 
     final question = currentQuestion;
 
-    if (question.correctIndex == null) {
+    if (question.question.type != QuestionType.multipleChoice ||
+        question.correctIndex == null) {
       return;
     }
 
@@ -104,7 +110,8 @@ class QuizSessionState extends ChangeNotifier {
 
     final question = currentQuestion;
 
-    if (question.question.answers.isEmpty) {
+    if (question.question.type != QuestionType.textInput ||
+        question.question.answers.isEmpty) {
       return;
     }
 
@@ -120,6 +127,50 @@ class QuizSessionState extends ChangeNotifier {
         textAnswer: enteredAnswer,
         correctTextAnswer: question.question.answers.first,
         isCorrect: isCorrect,
+        answeredAt: DateTime.now(),
+      ),
+    );
+  }
+
+  void revealFlashcardAnswer() {
+    if (_answered || _isSavingProgress || _isFinalizing) {
+      return;
+    }
+    if (currentQuestion.question.type != QuestionType.flashcard) {
+      return;
+    }
+    if (_flashcardAnswerRevealed) {
+      return;
+    }
+
+    _flashcardAnswerRevealed = true;
+    notifyListeners();
+  }
+
+  Future<void> answerFlashcard(FlashcardRating rating) async {
+    if (_answered ||
+        _isSavingProgress ||
+        _isFinalizing ||
+        !_flashcardAnswerRevealed) {
+      return;
+    }
+
+    final question = currentQuestion.question;
+
+    if (question.type != QuestionType.flashcard ||
+        question.flashcardAnswer == null) {
+      return;
+    }
+
+    _saveError = null;
+    _flashcardRating = rating;
+    _answered = true;
+
+    await _recordResult(
+      QuestionResult(
+        questionId: question.id,
+        flashcardRating: rating,
+        isCorrect: rating == FlashcardRating.remembered,
         answeredAt: DateTime.now(),
       ),
     );
@@ -144,6 +195,7 @@ class QuizSessionState extends ChangeNotifier {
       _results.removeLast();
       _selectedIndex = null;
       _textAnswer = null;
+      _flashcardRating = null;
       _answered = false;
       _saveError = '回答を保存できませんでした。もう一度回答してください。';
     } finally {
@@ -161,6 +213,8 @@ class QuizSessionState extends ChangeNotifier {
       _currentIndex += 1;
       _selectedIndex = null;
       _textAnswer = null;
+      _flashcardRating = null;
+      _flashcardAnswerRevealed = false;
       _answered = false;
       _saveError = null;
       notifyListeners();

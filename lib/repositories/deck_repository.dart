@@ -15,7 +15,8 @@ class DeckRepository {
     }
     final decoded = jsonDecode(raw) as List;
     return decoded
-        .map((item) => QuizDeck.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map(
+            (item) => QuizDeck.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
   }
 

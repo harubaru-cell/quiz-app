@@ -40,9 +40,10 @@ class DeckStats {
       totalAnswered: json['totalAnswered'] as int? ?? 0,
       totalCorrect: json['totalCorrect'] as int? ?? 0,
       lastPlayedAt: DateTime.tryParse(json['lastPlayedAt'] as String? ?? ''),
-      incorrectQuestionIds: ((json['incorrectQuestionIds'] as List?) ?? const [])
-          .cast<String>()
-          .toSet(),
+      incorrectQuestionIds:
+          ((json['incorrectQuestionIds'] as List?) ?? const [])
+              .cast<String>()
+              .toSet(),
     );
   }
 

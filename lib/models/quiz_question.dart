@@ -1,6 +1,7 @@
 enum QuestionType {
   multipleChoice('multiple_choice'),
-  textInput('text_input');
+  textInput('text_input'),
+  flashcard('flashcard');
 
   const QuestionType(this.value);
 
@@ -60,12 +61,20 @@ class QuizQuestion {
   final List<String> choices;
   final int? answer;
 
-  // 記述式問題で使用
+  // 記述式問題の正解候補、またはフラッシュカードの模範解答で使用
   final List<String> answers;
 
   final String explanation;
   final List<String> tags;
   final Difficulty difficulty;
+
+  String? get flashcardAnswer {
+    if (type != QuestionType.flashcard || answers.isEmpty) {
+      return null;
+    }
+
+    return answers.first;
+  }
 
   factory QuizQuestion.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -135,7 +144,7 @@ class QuizQuestion {
       answer = rawAnswer;
     }
 
-    if (type == QuestionType.textInput) {
+    if (type == QuestionType.textInput || type == QuestionType.flashcard) {
       final rawAnswers = json['answers'];
 
       if (rawAnswers is! List ||
@@ -144,7 +153,10 @@ class QuizQuestion {
             (answer) => answer is! String || answer.trim().isEmpty,
           )) {
         throw FormatException(
-          '問題 $id の answersには、正解候補を1つ以上指定してください。',
+          type == QuestionType.flashcard
+              ? '問題 $id の flashcard には、空でない模範解答を '
+                  'answers に1つ以上指定してください。'
+              : '問題 $id の answersには、正解候補を1つ以上指定してください。',
         );
       }
 
@@ -183,7 +195,7 @@ class QuizQuestion {
       json['answer'] = answer;
     }
 
-    if (type == QuestionType.textInput) {
+    if (type == QuestionType.textInput || type == QuestionType.flashcard) {
       json['answers'] = answers;
     }
 

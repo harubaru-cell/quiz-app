@@ -12,6 +12,7 @@ import 'package:personal_quiz_study/screens/quiz_screen.dart';
 import 'package:personal_quiz_study/screens/result_screen.dart';
 import 'package:personal_quiz_study/state/app_state.dart';
 import 'package:personal_quiz_study/state/quiz_session_state.dart';
+import 'package:personal_quiz_study/widgets/choice_button.dart';
 
 void main() {
   testWidgets('記述式で空欄回答を不正解として記録し、回答内容を表示する', (tester) async {
@@ -181,6 +182,230 @@ void main() {
 
     expect(find.byType(ResultScreen), findsOneWidget);
   });
+
+  testWidgets('flashcardは初期状態で事案と答えを見るだけを表示する', (tester) async {
+    const question = QuizQuestion(
+      id: 'flashcard-1',
+      type: QuestionType.flashcard,
+      question: 'XとYの間で架空の労働紛争が生じた。',
+      answers: <String>['【論点】\n架空の論点\n\n【結論】\n請求を認める。'],
+      explanation: '架空事件・2026年7月30日',
+      tags: <String>['労働法', '判例'],
+      difficulty: Difficulty.hard,
+    );
+    final session = _createSession(question);
+
+    await tester.pumpWidget(_buildApp(session));
+
+    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.text('事案の概要'), findsOneWidget);
+    expect(find.text(question.question), findsOneWidget);
+    expect(find.byKey(const ValueKey('show-flashcard-answer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('flashcard-rating-remembered')),
+      findsNothing,
+    );
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ChoiceButton), findsNothing);
+    expect(session.answeredCount, 0);
+  });
+
+  testWidgets('答えを見ると模範解答と自己評価を表示し、評価までは進まない', (tester) async {
+    const modelAnswer = '【論点】\n架空の論点\n\n【判旨】\n架空の判旨';
+    final question = _flashcardQuestion(
+      'flashcard-1',
+      answer: modelAnswer,
+    );
+    final session = _createSession(question);
+
+    await tester.pumpWidget(_buildApp(session));
+    await tester.tap(find.text('答えを見る'));
+    await tester.pump();
+
+    expect(find.text(modelAnswer), findsOneWidget);
+    expect(find.text('架空事件・2026年7月30日'), findsOneWidget);
+    expect(find.text('覚えた'), findsOneWidget);
+    expect(find.text('あやしい'), findsOneWidget);
+    expect(find.text('覚えていない'), findsOneWidget);
+    expect(session.currentIndex, 0);
+    expect(session.answeredCount, 0);
+    expect(find.text('次へ'), findsNothing);
+    expect(find.text('結果を見る'), findsNothing);
+  });
+
+  testWidgets('flashcardの自己評価後に保存し、新しいカードでは答えを隠す', (tester) async {
+    final firstQuestion = _flashcardQuestion('flashcard-1');
+    final secondQuestion = _flashcardQuestion(
+      'flashcard-2',
+      summary: '2件目の事案概要',
+      answer: '2件目の模範解答',
+    );
+    final savedResults = <QuestionResult>[];
+    final session = _createSession(
+      firstQuestion,
+      additionalQuestions: <QuizQuestion>[secondQuestion],
+      recorder: (result) async {
+        savedResults.add(result);
+      },
+    );
+
+    await tester.pumpWidget(_buildApp(session));
+    await tester.tap(find.text('答えを見る'));
+    await tester.pump();
+    await tester.tap(find.text('覚えた'));
+    await tester.pumpAndSettle();
+
+    expect(savedResults, hasLength(1));
+    expect(savedResults.single.isCorrect, isTrue);
+    expect(
+      savedResults.single.flashcardRating,
+      FlashcardRating.remembered,
+    );
+    expect(find.text('次へ'), findsOneWidget);
+
+    await tester.tap(find.text('次へ'));
+    await tester.pump();
+
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(find.text('2件目の事案概要'), findsOneWidget);
+    expect(find.text('2件目の模範解答'), findsNothing);
+    expect(find.byKey(const ValueKey('show-flashcard-answer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+    expect(session.flashcardAnswerRevealed, isFalse);
+    expect(session.flashcardRating, isNull);
+  });
+
+  testWidgets('四択・記述式・flashcardが混在しても前問の状態を残さない', (tester) async {
+    const multipleChoice = QuizQuestion(
+      id: 'choice-mixed',
+      type: QuestionType.multipleChoice,
+      question: '混在デッキの四択問題',
+      choices: <String>['正解', 'B', 'C', 'D'],
+      answer: 0,
+      explanation: '四択の解説',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    const textInput = QuizQuestion(
+      id: 'text-mixed',
+      type: QuestionType.textInput,
+      question: '混在デッキの記述式問題',
+      answers: <String>['記述正解'],
+      explanation: '記述式の解説',
+      tags: <String>[],
+      difficulty: Difficulty.normal,
+    );
+    final flashcard = _flashcardQuestion('flashcard-mixed');
+    final session = _createSession(
+      multipleChoice,
+      additionalQuestions: <QuizQuestion>[textInput, flashcard],
+    );
+
+    await tester.pumpWidget(_buildApp(session));
+    await tester.tap(find.text('1. 正解'));
+    await tester.pump();
+    await tester.tap(find.text('次へ'));
+    await tester.pump();
+
+    expect(find.text('混在デッキの記述式問題'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('四択の解説'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '記述正解');
+    await tester.tap(find.text('回答する'));
+    await tester.pump();
+    await tester.tap(find.text('次へ'));
+    await tester.pump();
+
+    expect(find.text('3 / 3'), findsOneWidget);
+    expect(find.byKey(const ValueKey('show-flashcard-answer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ChoiceButton), findsNothing);
+    expect(session.selectedIndex, isNull);
+    expect(session.textAnswer, isNull);
+  });
+
+  testWidgets('小さい画面でも長い事案と模範解答を最後までスクロールできる', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final longSummary = List<String>.generate(
+      60,
+      (index) => '事案段落${index + 1}：X、Y、A組合に関する架空の事情です。',
+    ).join('\n\n');
+    final longAnswer = List<String>.generate(
+      60,
+      (index) => '判旨段落${index + 1}：第${index + 1}条との関係を検討する架空の記述です。',
+    ).join('\n\n');
+    final session = _createSession(
+      _flashcardQuestion(
+        'long-flashcard',
+        summary: longSummary,
+        answer: longAnswer,
+      ),
+    );
+
+    await tester.pumpWidget(_buildApp(session));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.widget<Scrollable>(find.byType(Scrollable).first).axisDirection,
+      AxisDirection.down,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('show-flashcard-answer')),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('show-flashcard-answer')));
+    await tester.pump();
+
+    expect(find.text(longAnswer), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('flashcard-rating-forgotten')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('flashcard-rating-forgotten')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('要復習のflashcardを結果から再挑戦すると答えを隠して開始する', (tester) async {
+    final question = _flashcardQuestion('flashcard-retry');
+    final session = _createSession(question);
+    final appState = _ImmediateHistoryAppState();
+
+    await tester.pumpWidget(_buildAppWithAppState(session, appState));
+    await tester.tap(find.text('答えを見る'));
+    await tester.pump();
+    await tester.tap(find.text('あやしい'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('結果を見る'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ResultScreen), findsOneWidget);
+    expect(find.text('不正解数'), findsOneWidget);
+    expect(find.text('1問'), findsNWidgets(2));
+    expect(find.text('自己評価：あやしい'), findsOneWidget);
+
+    await tester.tap(find.text('間違えた問題だけ挑戦'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QuizScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('show-flashcard-answer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+  });
 }
 
 Widget _buildApp(QuizSessionState session) {
@@ -205,27 +430,47 @@ Widget _buildAppWithAppState(
 QuizSessionState _createSession(
   QuizQuestion question, {
   QuestionResultRecorder? recorder,
+  List<QuizQuestion> additionalQuestions = const <QuizQuestion>[],
 }) {
+  final questions = <QuizQuestion>[question, ...additionalQuestions];
   final deck = QuizDeck(
     id: 'deck-1',
     subject: 'テスト',
     title: 'テストデッキ',
     version: '1.4',
-    questions: <QuizQuestion>[question],
+    questions: questions,
     createdAt: DateTime(2026, 7, 15),
     updatedAt: DateTime(2026, 7, 15),
   );
 
   return QuizSessionState(
     deck: deck,
-    questions: <QuizSessionQuestion>[
-      QuizSessionQuestion(
-        question: question,
-        displayChoices: List<String>.from(question.choices),
-        correctIndex: question.answer,
-      ),
-    ],
+    questions: questions
+        .map(
+          (item) => QuizSessionQuestion(
+            question: item,
+            displayChoices: List<String>.from(item.choices),
+            correctIndex: item.answer,
+          ),
+        )
+        .toList(),
     questionResultRecorder: recorder,
+  );
+}
+
+QuizQuestion _flashcardQuestion(
+  String id, {
+  String summary = 'XとYの間で架空の労働紛争が生じた。',
+  String answer = '【論点】\n架空の論点\n\n【結論】\n請求を認める。',
+}) {
+  return QuizQuestion(
+    id: id,
+    type: QuestionType.flashcard,
+    question: summary,
+    answers: <String>[answer],
+    explanation: '架空事件・2026年7月30日',
+    tags: const <String>['労働法', '判例'],
+    difficulty: Difficulty.hard,
   );
 }
 
@@ -243,4 +488,9 @@ class _DelayedHistoryAppState extends AppState {
   void completeSave() {
     _saveCompleter.complete();
   }
+}
+
+class _ImmediateHistoryAppState extends AppState {
+  @override
+  Future<void> recordHistory(QuizHistory history) async {}
 }

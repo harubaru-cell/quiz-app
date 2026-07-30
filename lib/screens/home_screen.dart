@@ -10,7 +10,7 @@ import 'deck_settings_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  static const String _appVersion = '1.4';
+  static const String _appVersion = '1.5';
 
   @override
   Widget build(BuildContext context) {
