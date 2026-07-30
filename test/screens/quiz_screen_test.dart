@@ -13,6 +13,7 @@ import 'package:personal_quiz_study/screens/result_screen.dart';
 import 'package:personal_quiz_study/state/app_state.dart';
 import 'package:personal_quiz_study/state/quiz_session_state.dart';
 import 'package:personal_quiz_study/widgets/choice_button.dart';
+import 'package:personal_quiz_study/widgets/decorated_study_text.dart';
 
 void main() {
   testWidgets('記述式で空欄回答を不正解として記録し、回答内容を表示する', (tester) async {
@@ -234,6 +235,71 @@ void main() {
     expect(find.text('結果を見る'), findsNothing);
   });
 
+  testWidgets('flashcardの事案・模範解答・解説へ同じ装飾を適用する', (tester) async {
+    const summary = '【事案の概要】\nXとYには**職種限定合意**があった。\n'
+        'Yは==個別的同意なしに==配転を命じた。';
+    const answer = '【判旨】\n**職種限定合意**がある場合、'
+        '==個別的同意なしに配転できない==。\n\n'
+        '【結論】\n__配転命令権は認められない__。';
+    const explanation = '**架空事件**・最二小判令和6年4月26日';
+    const question = QuizQuestion(
+      id: 'decorated-flashcard',
+      type: QuestionType.flashcard,
+      question: summary,
+      answers: <String>[answer],
+      explanation: explanation,
+      tags: <String>['労働法', '判例'],
+      difficulty: Difficulty.hard,
+    );
+    final session = _createSession(question);
+
+    await tester.pumpWidget(_buildApp(session));
+
+    final caseText = find.descendant(
+      of: find.byKey(const ValueKey('flashcard-case-card')),
+      matching: find.byType(DecoratedStudyText),
+    );
+    expect(caseText, findsOneWidget);
+    expect(tester.widget<DecoratedStudyText>(caseText).text, summary);
+    expect(
+      _renderedTextOf(tester, caseText),
+      '【事案の概要】\nXとYには職種限定合意があった。\n'
+      'Yは個別的同意なしに配転を命じた。',
+    );
+    expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+
+    await tester.tap(find.text('答えを見る'));
+    await tester.pump();
+
+    final answerText = find.descendant(
+      of: find.byKey(const ValueKey('flashcard-answer-card')),
+      matching: find.byType(DecoratedStudyText),
+    );
+    final explanationText = find.descendant(
+      of: find.byKey(const ValueKey('flashcard-explanation-card')),
+      matching: find.byType(DecoratedStudyText),
+    );
+    expect(answerText, findsOneWidget);
+    expect(explanationText, findsOneWidget);
+    expect(tester.widget<DecoratedStudyText>(answerText).text, answer);
+    expect(
+      tester.widget<DecoratedStudyText>(explanationText).text,
+      explanation,
+    );
+    expect(_renderedTextOf(tester, answerText), isNot(contains('==')));
+    expect(_renderedTextOf(tester, answerText), isNot(contains('__')));
+    expect(_renderedTextOf(tester, explanationText), isNot(contains('**')));
+
+    final rememberedButton = find.text('覚えた');
+    await tester.ensureVisible(rememberedButton);
+    await tester.pumpAndSettle();
+    await tester.tap(rememberedButton);
+    await tester.pumpAndSettle();
+
+    expect(session.flashcardRating, FlashcardRating.remembered);
+    expect(session.correctCount, 1);
+  });
+
   testWidgets('flashcardの自己評価後に保存し、新しいカードでは答えを隠す', (tester) async {
     final firstQuestion = _flashcardQuestion('flashcard-1');
     final secondQuestion = _flashcardQuestion(
@@ -380,7 +446,11 @@ void main() {
   });
 
   testWidgets('要復習のflashcardを結果から再挑戦すると答えを隠して開始する', (tester) async {
-    final question = _flashcardQuestion('flashcard-retry');
+    final question = _flashcardQuestion(
+      'flashcard-retry',
+      summary: '【事案の概要】\n**要復習の事案**',
+      answer: '【判旨】\n==要復習の模範解答==',
+    );
     final session = _createSession(question);
     final appState = _ImmediateHistoryAppState();
 
@@ -427,6 +497,106 @@ void main() {
     expect(find.byType(QuizScreen), findsOneWidget);
     expect(find.byKey(const ValueKey('show-flashcard-answer')), findsOneWidget);
     expect(find.byKey(const ValueKey('flashcard-answer-card')), findsNothing);
+
+    final retryCaseText = find.descendant(
+      of: find.byKey(const ValueKey('flashcard-case-card')),
+      matching: find.byType(DecoratedStudyText),
+    );
+    expect(retryCaseText, findsOneWidget);
+    expect(
+      _renderedTextOf(tester, retryCaseText),
+      '【事案の概要】\n要復習の事案',
+    );
+  });
+
+  testWidgets('結果画面の事案・模範解答・解説にも同じ装飾を適用する', (tester) async {
+    const summary = '【事案の概要】\n**結果画面の事案**';
+    const answer = '【判旨】\n==結果画面の模範解答==\n\n'
+        '【結論】\n__請求を認める__。';
+    const explanation = '**結果画面の架空事件**';
+    const question = QuizQuestion(
+      id: 'result-decoration',
+      type: QuestionType.flashcard,
+      question: summary,
+      answers: <String>[answer],
+      explanation: explanation,
+      tags: <String>['労働法', '判例'],
+      difficulty: Difficulty.hard,
+    );
+    final deck = QuizDeck(
+      id: 'result-deck',
+      subject: '労働法',
+      title: '結果画面テスト',
+      version: '1.5',
+      questions: const <QuizQuestion>[question],
+      createdAt: DateTime(2026, 7, 30),
+      updatedAt: DateTime(2026, 7, 30),
+    );
+    final history = QuizHistory(
+      id: 'result-history',
+      deckId: deck.id,
+      playedAt: DateTime(2026, 7, 30),
+      totalAnswered: 1,
+      correctCount: 1,
+      incorrectCount: 0,
+      completed: true,
+      results: <QuestionResult>[
+        QuestionResult(
+          questionId: question.id,
+          flashcardRating: FlashcardRating.remembered,
+          isCorrect: true,
+          answeredAt: DateTime(2026, 7, 30),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ResultScreen(
+          deck: deck,
+          history: history,
+        ),
+      ),
+    );
+
+    final ratingLabel = find.text('自己評価：覚えた');
+    final resultScrollable = find.descendant(
+      of: find.byType(ResultScreen),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      ratingLabel,
+      200,
+      scrollable: resultScrollable,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(ratingLabel);
+    await tester.pumpAndSettle();
+
+    final decoratedTexts = tester
+        .widgetList<DecoratedStudyText>(
+          find.byType(DecoratedStudyText),
+        )
+        .map((widget) => widget.text)
+        .toList();
+    expect(
+        decoratedTexts,
+        containsAll(<String>[
+          summary,
+          answer,
+          explanation,
+        ]));
+
+    for (final decoratedText in find.byType(DecoratedStudyText).evaluate()) {
+      final renderedText = _renderedTextOf(
+        tester,
+        find.byWidget(decoratedText.widget),
+      );
+      expect(renderedText, isNot(contains('**')));
+      expect(renderedText, isNot(contains('==')));
+      expect(renderedText, isNot(contains('__')));
+    }
+    expect(tester.takeException(), isNull);
   });
 }
 
@@ -515,4 +685,18 @@ class _DelayedHistoryAppState extends AppState {
 class _ImmediateHistoryAppState extends AppState {
   @override
   Future<void> recordHistory(QuizHistory history) async {}
+}
+
+String _renderedTextOf(
+  WidgetTester tester,
+  Finder decoratedText,
+) {
+  final textWidget = tester.widget<Text>(
+    find.descendant(
+      of: decoratedText,
+      matching: find.byType(Text),
+    ),
+  );
+
+  return textWidget.textSpan?.toPlainText() ?? textWidget.data ?? '';
 }

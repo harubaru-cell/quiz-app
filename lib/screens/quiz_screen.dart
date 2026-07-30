@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../state/quiz_session_state.dart';
 import '../widgets/bottom_action_area.dart';
 import '../widgets/choice_button.dart';
+import '../widgets/decorated_study_text.dart';
 import '../widgets/question_audio_button.dart';
 import 'result_screen.dart';
 
@@ -422,9 +423,8 @@ class _FlashcardContentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              content,
-              softWrap: true,
+            DecoratedStudyText(
+              text: content,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     height: 1.65,
                   ),
