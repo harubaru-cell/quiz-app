@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../widgets/deck_card.dart';
 import '../widgets/empty_state.dart';
 import 'deck_settings_screen.dart';
+import 'backup_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -38,6 +39,13 @@ class HomeScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('クイズ学習'),
             actions: [
+              IconButton(
+                tooltip: 'バックアップ・復元検証',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const BackupScreen()),
+                ),
+                icon: const Icon(Icons.backup_outlined),
+              ),
               IconButton(
                 tooltip: 'JSON・ZIPファイル追加',
                 onPressed: appState.importDeckFromFile,

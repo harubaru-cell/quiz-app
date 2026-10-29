@@ -17,6 +17,7 @@ dependencies:
   archive: ^4.0.9
   idb_shim: ^2.9.6+2
   web: ^1.1.1
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

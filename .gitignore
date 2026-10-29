@@ -7,3 +7,7 @@ coverage/
 *.iml
 .idea/
 .vscode/
+
+# Personal backups must never be committed or published.
+*.quiz-backup*.json*
+private_backups/
