@@ -8,6 +8,7 @@ import 'package:personal_quiz_study/models/quiz_backup.dart';
 import 'package:personal_quiz_study/services/backup_browser_web.dart';
 import 'package:personal_quiz_study/services/backup_sandbox_service.dart';
 import 'package:personal_quiz_study/services/backup_service.dart';
+import 'package:personal_quiz_study/services/live_restore_service.dart';
 import '../test/support/backup_fixtures.dart';
 
 /// Plain Dart browser test of the production storage adapters. It deliberately
@@ -57,6 +58,59 @@ Future<void> main() async {
         '対象外データが変化した');
     checks.add('実IndexedDBで音声込み復元・再オープン・元データ不変・検証DB削除');
 
+    final live = BrowserLiveRestoreStore();
+    final beforeRestore = (await BackupService(live).capture('退避')).backup;
+    final targetSnapshot = BackupSnapshot(preferences: {
+      ...replacePreference(plain, 'study_cycles', null).preferences,
+      '${backupPreferencePrefix}future-absent': null,
+      '${backupPreferencePrefix}future-value': ' 原文\n未知の値 ',
+    });
+    final target = fixtureDocument(targetSnapshot);
+    await LiveRestoreService(live)
+        .restore(target, beforeRestore, confirmed: true);
+    require(
+        sameBackupContents(await live.read(), targetSnapshot), '本番形式の完全置換不一致');
+    require(!(await names()).contains(backupAudioDatabase), '音声DB不在に戻っていない');
+    require(storage.getItem('unrelated-test-sentinel') == 'unchanged',
+        '無関係キーを変更した');
+    require(await live.readRecovery() == null, '成功後に未完了退避が残った');
+    checks.add('本番アダプターで完全置換・未作成キー・未知キー・DB不在・再読込一致');
+
+    final safety = (await BackupService(live).capture('退避')).backup;
+    final failing = FailingBrowserRestoreStore();
+    var failed = false;
+    try {
+      await LiveRestoreService(failing)
+          .restore(selected, safety, confirmed: true);
+    } catch (_) {
+      failed = true;
+    }
+    require(failed && sameBackupContents(await live.read(), safety.snapshot),
+        '書込後エラーのロールバック不一致');
+    require(await live.readRecovery() == null, '正常なロールバック後に退避が残った');
+    checks.add('実保存後の注入エラーから元の原文・音声DB不在へロールバック');
+
+    // Persist the same journal and partial state left by an interrupted page.
+    await live.exclusively(() async {
+      await live.saveRecovery(safety);
+      await live.replace(BackupSnapshot(
+          preferences: safety.snapshot.preferences,
+          audio: selected.snapshot.audio,
+          audioDatabaseVersion: selected.snapshot.audioDatabaseVersion));
+    });
+    var startupBlocked = false;
+    try {
+      await guardStudyStartup();
+    } catch (_) {
+      startupBlocked = true;
+    }
+    require(startupBlocked, '未完了の復元で通常学習が開始された');
+    await LiveRestoreService(BrowserLiveRestoreStore()).recover();
+    require(
+        sameBackupContents(await live.read(), safety.snapshot), '中断後の復旧不一致');
+    require(await live.readRecovery() == null, '復旧後に未完了退避が残った');
+    checks.add('永続退避を新インスタンスで検出・通常起動停止・復旧して完全一致');
+
     await idbFactoryNative.deleteDatabase(backupAudioDatabase);
     database = await idbFactoryNative.open(backupAudioDatabase, version: 1,
         onUpgradeNeeded: (event) {
@@ -75,6 +129,19 @@ Future<void> main() async {
     require(database.objectStoreNames.contains('future-store'), '元スキーマが変化した');
     database.close();
     checks.add('未知の音声ストアを省略せず拒否・元スキーマ維持');
+    await idbFactoryNative.deleteDatabase(backupAudioDatabase);
+    await guardStudyStartup();
+    var exclusiveRefused = false;
+    try {
+      await LiveRestoreService(live).restore(selected, safety, confirmed: true);
+    } catch (_) {
+      exclusiveRefused = true;
+    }
+    require(exclusiveRefused && await live.readRecovery() == null,
+        '学習中の排他復元を拒否できていない');
+    require(sameBackupContents(await live.read(), safety.snapshot),
+        '排他拒否時にデータが変わった');
+    checks.add('通常学習の共有ロック中は本番復元を拒否・元データ不変');
     report['passed'] = true;
   } catch (error, stack) {
     report['error'] = '$error';
@@ -86,6 +153,23 @@ Future<void> main() async {
       .fetch(
           '/result'.toJS, web.RequestInit(method: 'POST', body: encoded.toJS))
       .toDart;
+}
+
+class FailingBrowserRestoreStore extends BrowserLiveRestoreStore {
+  bool failOnce = true;
+  @override
+  Future<void> replace(BackupSnapshot snapshot) async {
+    if (failOnce) {
+      failOnce = false;
+      final previous = await read();
+      await super.replace(BackupSnapshot(
+          preferences: previous.preferences,
+          audio: snapshot.audio,
+          audioDatabaseVersion: snapshot.audioDatabaseVersion));
+      throw StateError('test-only failure between audio and preferences');
+    }
+    await super.replace(snapshot);
+  }
 }
 
 void require(bool condition, String message) {

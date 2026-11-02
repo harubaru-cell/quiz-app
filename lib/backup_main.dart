@@ -24,6 +24,6 @@ class BackupApp extends StatelessWidget {
                 seedColor: const Color(0xFF70A9A1),
                 brightness: Brightness.dark),
             useMaterial3: true),
-        home: const BackupScreen(),
+        home: const BackupScreen(allowLiveRestore: true),
       );
 }

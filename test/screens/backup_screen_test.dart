@@ -69,10 +69,15 @@ void main() {
         isNull);
     await tester.tap(find.byKey(const ValueKey('prepare-backup')));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.textContaining('ファイルはまだ保存していません'), 100,
+        scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('ファイルはまだ保存していません'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('download-backup')));
     await tester.tap(find.byKey(const ValueKey('download-backup')));
     await tester.pump();
     expect(downloads.single, endsWith('.quiz-backup.json'));
+    await tester.scrollUntilVisible(find.textContaining('保存完了はまだ未確認'), 100,
+        scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('保存完了はまだ未確認'), findsOneWidget);
     expect(
         tester
@@ -93,6 +98,8 @@ void main() {
     )));
     await tester.tap(find.byKey(const ValueKey('load-backup')));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.textContaining('隔離復元はまだ実行していません'), 100,
+        scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('隔離復元はまだ実行していません'), findsOneWidget);
     expect(
         tester
